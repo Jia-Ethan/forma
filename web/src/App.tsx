@@ -1,32 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import type { HealthResponse, JobCreateResponse, JobStatusResponse } from "./types";
+import type { BodySection, HealthResponse, MetadataFields, NormalizedThesis } from "./generated/contracts";
 
-type TabKey = "docx" | "form";
+type InputMode = "docx" | "text";
 
-type MetaFields = {
-  title: string;
-  author_name: string;
-  student_id: string;
-  department: string;
-  major: string;
-  class_name: string;
-  advisor_name: string;
-  submission_date: string;
+type ApiErrorPayload = {
+  error_code?: string;
+  error_message?: string;
 };
 
-type StructuredFields = MetaFields & {
-  abstract_cn: string;
-  abstract_en: string;
-  keywords_cn: string;
-  keywords_en: string;
-  body: string;
-  references: string;
-  acknowledgements: string;
-  appendix: string;
-};
-
-const defaultMeta: MetaFields = {
+const emptyMetadata: MetadataFields = {
   title: "",
   author_name: "",
   student_id: "",
@@ -37,364 +19,546 @@ const defaultMeta: MetaFields = {
   submission_date: new Date().toISOString().slice(0, 10),
 };
 
-const defaultStructured: StructuredFields = {
-  ...defaultMeta,
-  abstract_cn: "",
-  abstract_en: "",
-  keywords_cn: "",
-  keywords_en: "",
-  body: "",
-  references: "",
-  acknowledgements: "",
-  appendix: "",
-};
+class ApiError extends Error {
+  code?: string;
 
-async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+async function jsonRequest<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
-  const data = await response.json();
+  const data = (await response.json()) as T & ApiErrorPayload;
   if (!response.ok) {
-    throw new Error(data.error_message || response.statusText);
+    throw new ApiError(data.error_message || response.statusText, data.error_code);
   }
   return data as T;
 }
 
-function AppHome() {
-  const [activeTab, setActiveTab] = useState<TabKey>("docx");
+async function blobRequest(input: RequestInfo | URL, init?: RequestInit): Promise<Blob> {
+  const response = await fetch(input, init);
+  if (!response.ok) {
+    const payload = (await response.json()) as ApiErrorPayload;
+    throw new ApiError(payload.error_message || response.statusText, payload.error_code);
+  }
+  return response.blob();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function keywordsToString(keywords: string[]) {
+  return keywords.join("；");
+}
+
+function splitKeywords(value: string) {
+  return value
+    .split(/[\n，,；;、]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function referencesToString(thesis: NormalizedThesis) {
+  return thesis.references.items.join("\n");
+}
+
+function defaultThesis(health: HealthResponse | null): NormalizedThesis {
+  return {
+    source_type: "text",
+    metadata: { ...emptyMetadata },
+    abstract_cn: { content: "", keywords: [] },
+    abstract_en: { content: "", keywords: [] },
+    body_sections: [],
+    references: { items: [] },
+    acknowledgements: "",
+    appendix: "",
+    warnings: [],
+    parse_errors: [],
+    capabilities: health?.capabilities ?? {
+      tex_zip: true,
+      pdf: false,
+      pdf_reason: "当前能力尚未加载完成。",
+    },
+  };
+}
+
+function StepIndicator({ active }: { active: number }) {
+  const steps = ["输入", "识别", "修正", "导出"];
+  return (
+    <div className="stepper">
+      {steps.map((step, index) => (
+        <div key={step} className={index + 1 <= active ? "step active" : "step"}>
+          {index + 1}. {step}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [metaFields, setMetaFields] = useState<MetaFields>(defaultMeta);
-  const [structuredFields, setStructuredFields] = useState<StructuredFields>(defaultStructured);
+  const [mode, setMode] = useState<InputMode>("docx");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [rawText, setRawText] = useState("");
+  const [thesis, setThesis] = useState<NormalizedThesis | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState<"tex" | "pdf" | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
-    apiJson<HealthResponse>("/api/health")
+    jsonRequest<HealthResponse>("/api/health")
       .then(setHealth)
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(err instanceof ApiError ? err : new ApiError("健康检查失败")));
   }, []);
 
-  const missingTex = useMemo(() => health?.tex.missing_styles ?? [], [health]);
+  const currentThesis = thesis ?? defaultThesis(health);
+  const activeStep = thesis ? 4 : 1;
+  const capabilityMessage = health?.capabilities.pdf_reason ?? "PDF 仅在本地开发模式中可用。";
+  const bodyCount = useMemo(() => currentThesis.body_sections.length, [currentThesis.body_sections.length]);
 
-  function updateMetaField(field: keyof MetaFields, value: string) {
-    setMetaFields((prev) => ({ ...prev, [field]: value }));
-    setStructuredFields((prev) => ({ ...prev, [field]: value }));
+  function resetError() {
+    if (error) setError(null);
   }
 
-  function updateStructuredField(field: keyof StructuredFields, value: string) {
-    setStructuredFields((prev) => ({ ...prev, [field]: value }));
-    if (field in defaultMeta) {
-      setMetaFields((prev) => ({ ...prev, [field as keyof MetaFields]: value }));
+  function updateMetadata(field: keyof MetadataFields, value: string) {
+    setThesis((prev) => ({
+      ...(prev ?? defaultThesis(health)),
+      metadata: { ...(prev ?? defaultThesis(health)).metadata, [field]: value },
+    }));
+  }
+
+  function updateSection(index: number, patch: Partial<BodySection>) {
+    setThesis((prev) => {
+      const base = prev ?? defaultThesis(health);
+      const bodySections = [...base.body_sections];
+      bodySections[index] = { ...bodySections[index], ...patch };
+      return { ...base, body_sections: bodySections };
+    });
+  }
+
+  function addSection() {
+    setThesis((prev) => {
+      const base = prev ?? defaultThesis(health);
+      return {
+        ...base,
+        body_sections: [
+          ...base.body_sections,
+          {
+            id: `manual-${Date.now()}`,
+            level: 1,
+            title: `新章节 ${base.body_sections.length + 1}`,
+            content: "",
+          },
+        ],
+      };
+    });
+  }
+
+  function removeSection(index: number) {
+    setThesis((prev) => {
+      const base = prev ?? defaultThesis(health);
+      return {
+        ...base,
+        body_sections: base.body_sections.filter((_, currentIndex) => currentIndex !== index),
+      };
+    });
+  }
+
+  async function handleParse(event: FormEvent) {
+    event.preventDefault();
+    resetError();
+    setBusy(true);
+    try {
+      if (mode === "docx") {
+        if (!selectedFile) {
+          throw new ApiError("请先选择一个 .docx 文件。", "UNSUPPORTED_FILE_TYPE");
+        }
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        const parsed = await jsonRequest<NormalizedThesis>("/api/parse/docx", {
+          method: "POST",
+          body: formData,
+        });
+        setThesis({
+          ...parsed,
+          metadata: { ...emptyMetadata, ...parsed.metadata },
+          capabilities: health?.capabilities ?? parsed.capabilities,
+        });
+      } else {
+        const parsed = await jsonRequest<NormalizedThesis>("/api/normalize/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: rawText }),
+        });
+        setThesis({
+          ...parsed,
+          metadata: { ...emptyMetadata, ...parsed.metadata },
+          capabilities: health?.capabilities ?? parsed.capabilities,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError("解析失败"));
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function handleStructuredSubmit(event: FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
+  async function handleExport(kind: "tex" | "pdf") {
+    resetError();
+    setExporting(kind);
     try {
-      const payload = structuredFields;
-      const result = await apiJson<JobCreateResponse>("/api/jobs/from-form", {
+      const endpoint = kind === "tex" ? "/api/export/texzip" : "/api/export/pdf";
+      const blob = await blobRequest(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(currentThesis),
       });
-      navigate(`/jobs/${result.job_id}`);
+      const title = currentThesis.metadata.title || "scnu-thesis";
+      downloadBlob(blob, kind === "tex" ? `${title}.zip` : `${title}.pdf`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "提交失败");
+      setError(err instanceof ApiError ? err : new ApiError("导出失败"));
     } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleDocxSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!selectedFile) {
-      setError("请先选择 .docx 文件。");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const formData = new FormData();
-      Object.entries(metaFields).forEach(([key, value]) => formData.append(key, value));
-      formData.append("file", selectedFile);
-      const result = await apiJson<JobCreateResponse>("/api/jobs/from-docx", {
-        method: "POST",
-        body: formData,
-      });
-      navigate(`/jobs/${result.job_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "上传失败");
-    } finally {
-      setSubmitting(false);
+      setExporting(null);
     }
   }
 
   return (
-    <div className="page">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">SCNU Thesis Portal Local MVP</p>
-          <h1>本地论文模板映射演示站</h1>
-          <p className="hero-copy">
-            只支持 <code>.docx</code> 与结构化输入，不保留原 Word 样式。当前目标是稳定跑通结构化映射 → LaTeX 工程 → PDF 导出。
-          </p>
-        </div>
-        <div className="status-card">
-          <h2>本机环境</h2>
-          <p>XeLaTeX：{health?.tex.xelatex ? "可用" : "缺失"}</p>
-          <p>kpsewhich：{health?.tex.kpsewhich ? "可用" : "缺失"}</p>
-          {missingTex.length > 0 ? (
-            <div className="warning">
-              <strong>缺少 TeX 宏包：</strong>
-              <div>{missingTex.join(", ")}</div>
-            </div>
-          ) : (
-            <p className="ok">TeX 关键依赖已通过预检。</p>
-          )}
-        </div>
-      </header>
-
-      {error ? <div className="error-banner">{error}</div> : null}
-
-      <section className="tabs">
-        <button className={activeTab === "docx" ? "tab active" : "tab"} onClick={() => setActiveTab("docx")}>
-          上传 .docx
-        </button>
-        <button className={activeTab === "form" ? "tab active" : "tab"} onClick={() => setActiveTab("form")}>
-          结构化输入
-        </button>
-      </section>
-
-      <div className="layout">
-        <section className="panel">
-          <h2>封面与基础信息</h2>
-          <div className="form-grid">
-            {Object.entries(metaFields).map(([key, value]) => (
-              <label key={key}>
-                <span>{labelMap[key as keyof MetaFields]}</span>
-                <input
-                  value={value}
-                  onChange={(event) => updateMetaField(key as keyof MetaFields, event.target.value)}
-                />
-              </label>
-            ))}
+    <div className="page-shell">
+      <main className="page">
+        <section className="hero">
+          <div className="hero-copy">
+            <p className="eyebrow">SCNU Thesis Portal v0.2</p>
+            <h1>把原始论文内容整理成可进入模板的规范化产物</h1>
+            <p>
+              当前支持上传 <code>.docx</code> 或直接粘贴正文，系统会先做结构识别，再让你在网页内补全与修正，最后导出
+              规范化 <code>.tex</code> 工程 zip。
+            </p>
+            <ul className="plain-list muted">
+              <li>仅支持 `.docx`，不支持 `.doc`</li>
+              <li>不保留原 Word 样式</li>
+              <li>复杂表格、图片、特殊排版未完整支持</li>
+              <li>当前不是学校官方认证工具</li>
+            </ul>
           </div>
+          <aside className="status-card">
+            <h2>当前能力</h2>
+            <p>模板：{health?.template ?? "加载中"}</p>
+            <p>主产物：规范化 `.tex` 工程 zip</p>
+            <p>PDF：{health?.capabilities.pdf ? "已开启" : "未开启"}</p>
+            <p className="muted">{capabilityMessage}</p>
+            <p className="muted">上传上限：{health ? `${Math.floor(health.limits.max_docx_size_bytes / 1024 / 1024)} MB` : "加载中"}</p>
+          </aside>
         </section>
 
-        {activeTab === "docx" ? (
-          <section className="panel">
-            <h2>上传 .docx</h2>
-            <form onSubmit={handleDocxSubmit} className="stack">
-              <label className="file-input">
-                <span>选择论文文件（仅 .docx）</span>
+        <StepIndicator active={activeStep} />
+
+        {error ? (
+          <div className="error-banner">
+            <strong>{error.code ?? "ERROR"}</strong>
+            <p>{error.message}</p>
+          </div>
+        ) : null}
+
+        <section className="panel">
+          <div className="tabs">
+            <button className={mode === "docx" ? "tab active" : "tab"} type="button" onClick={() => setMode("docx")}>
+              上传 `.docx`
+            </button>
+            <button className={mode === "text" ? "tab active" : "tab"} type="button" onClick={() => setMode("text")}>
+              粘贴正文
+            </button>
+          </div>
+
+          <form className="stack" onSubmit={handleParse}>
+            {mode === "docx" ? (
+              <label className="stack">
+                <span>选择论文文件</span>
                 <input
                   type="file"
                   accept=".docx"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => {
+                    setSelectedFile(event.target.files?.[0] ?? null);
+                    resetError();
+                  }}
                 />
               </label>
-              <p className="helper">
-                上传后系统会提取文本和标题层级，再映射到本科论文模板。它不会保留原 Word 排版。
-              </p>
-              <button type="submit" disabled={submitting}>
-                {submitting ? "处理中..." : "上传并生成"}
+            ) : (
+              <label className="stack">
+                <span>粘贴正文或整段论文文本</span>
+                <textarea
+                  rows={12}
+                  value={rawText}
+                  onChange={(event) => {
+                    setRawText(event.target.value);
+                    resetError();
+                  }}
+                  placeholder="可直接粘贴带标题的文本，例如：摘要 / Abstract / 第一章 / 参考文献 / 致谢 / 附录"
+                />
+              </label>
+            )}
+
+            <div className="actions">
+              <button type="submit" disabled={busy}>
+                {busy ? "识别中..." : "开始识别"}
               </button>
-            </form>
-          </section>
-        ) : (
-          <section className="panel">
-            <h2>结构化输入</h2>
-            <form onSubmit={handleStructuredSubmit} className="stack">
-              {structuredFieldOrder.map((field) => (
-                <label key={field}>
-                  <span>{structuredLabelMap[field]}</span>
-                  {longTextFields.has(field) ? (
-                    <textarea
-                      rows={field === "body" ? 12 : 6}
-                      value={structuredFields[field]}
-                      onChange={(event) => updateStructuredField(field, event.target.value)}
-                    />
+            </div>
+          </form>
+        </section>
+
+        {thesis ? (
+          <>
+            <section className="grid two">
+              <article className="panel">
+                <h2>识别结果概览</h2>
+                {currentThesis.warnings.length > 0 ? (
+                  <div className="warning-card">
+                    <strong>Warnings</strong>
+                    <ul className="plain-list">
+                      {currentThesis.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {currentThesis.parse_errors.length > 0 ? (
+                  <div className="error-card">
+                    <strong>Parse Errors</strong>
+                    <ul className="plain-list">
+                      {currentThesis.parse_errors.map((message) => (
+                        <li key={message}>{message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <ul className="plain-list">
+                  <li>中文摘要：{currentThesis.abstract_cn.content ? "已识别" : "待补充"}</li>
+                  <li>Abstract：{currentThesis.abstract_en.content ? "已识别" : "待补充"}</li>
+                  <li>正文章节：{bodyCount} 个</li>
+                  <li>参考文献：{currentThesis.references.items.length} 条</li>
+                  <li>致谢：{currentThesis.acknowledgements ? "已识别" : "待补充"}</li>
+                  <li>附录：{currentThesis.appendix ? "已识别" : "待补充"}</li>
+                </ul>
+              </article>
+
+              <article className="panel">
+                <h2>导出说明</h2>
+                <p>线上首轮默认主产物是规范化 `.tex` 工程 zip，方便你继续人工调整与本地编译。</p>
+                <div className="actions">
+                  <button type="button" onClick={() => handleExport("tex")} disabled={exporting !== null}>
+                    {exporting === "tex" ? "导出中..." : "导出 .tex 工程 zip"}
+                  </button>
+                  {currentThesis.capabilities.pdf ? (
+                    <button type="button" className="secondary-button" onClick={() => handleExport("pdf")} disabled={exporting !== null}>
+                      {exporting === "pdf" ? "导出中..." : "导出 PDF"}
+                    </button>
                   ) : (
-                    <input
-                      value={structuredFields[field]}
-                      onChange={(event) => updateStructuredField(field, event.target.value)}
-                    />
+                    <button type="button" className="secondary-button" disabled>
+                      PDF 当前未开启
+                    </button>
                   )}
+                </div>
+                {!currentThesis.capabilities.pdf ? <p className="muted">{currentThesis.capabilities.pdf_reason}</p> : null}
+              </article>
+            </section>
+
+            <section className="panel">
+              <h2>字段补全与修正</h2>
+              <div className="form-grid">
+                {(
+                  [
+                    ["title", "论文题目"],
+                    ["author_name", "学生姓名"],
+                    ["student_id", "学号"],
+                    ["department", "学院 / 系别"],
+                    ["major", "专业"],
+                    ["class_name", "班级"],
+                    ["advisor_name", "指导老师"],
+                    ["submission_date", "提交日期"],
+                  ] as [keyof MetadataFields, string][]
+                ).map(([field, label]) => (
+                  <label key={field}>
+                    <span>{label}</span>
+                    <input value={currentThesis.metadata[field] ?? ""} onChange={(event) => updateMetadata(field, event.target.value)} />
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="grid two">
+              <article className="panel">
+                <h2>中文摘要</h2>
+                <label>
+                  <span>摘要</span>
+                  <textarea
+                    rows={8}
+                    value={currentThesis.abstract_cn.content}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        abstract_cn: { ...currentThesis.abstract_cn, content: event.target.value },
+                      }))
+                    }
+                  />
                 </label>
-              ))}
-              <button type="submit" disabled={submitting}>
-                {submitting ? "处理中..." : "生成 PDF 与 tex 工程"}
-              </button>
-            </form>
-          </section>
-        )}
-      </div>
+                <label>
+                  <span>关键词</span>
+                  <input
+                    value={keywordsToString(currentThesis.abstract_cn.keywords)}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        abstract_cn: { ...currentThesis.abstract_cn, keywords: splitKeywords(event.target.value) },
+                      }))
+                    }
+                  />
+                </label>
+              </article>
+
+              <article className="panel">
+                <h2>Abstract</h2>
+                <label>
+                  <span>Abstract</span>
+                  <textarea
+                    rows={8}
+                    value={currentThesis.abstract_en.content}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        abstract_en: { ...currentThesis.abstract_en, content: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Keywords</span>
+                  <input
+                    value={keywordsToString(currentThesis.abstract_en.keywords)}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        abstract_en: { ...currentThesis.abstract_en, keywords: splitKeywords(event.target.value) },
+                      }))
+                    }
+                  />
+                </label>
+              </article>
+            </section>
+
+            <section className="panel">
+              <div className="section-header">
+                <h2>正文章节</h2>
+                <button type="button" className="secondary-button" onClick={addSection}>
+                  新增章节
+                </button>
+              </div>
+              <div className="stack">
+                {currentThesis.body_sections.map((section, index) => (
+                  <article className="section-card" key={section.id}>
+                    <div className="section-row">
+                      <label>
+                        <span>层级</span>
+                        <select
+                          value={section.level}
+                          onChange={(event) => updateSection(index, { level: Number(event.target.value) })}
+                        >
+                          <option value={1}>一级标题</option>
+                          <option value={2}>二级标题</option>
+                          <option value={3}>三级标题</option>
+                        </select>
+                      </label>
+                      <button type="button" className="ghost-button" onClick={() => removeSection(index)}>
+                        删除
+                      </button>
+                    </div>
+                    <label>
+                      <span>章节标题</span>
+                      <input value={section.title} onChange={(event) => updateSection(index, { title: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>章节内容</span>
+                      <textarea
+                        rows={8}
+                        value={section.content}
+                        onChange={(event) => updateSection(index, { content: event.target.value })}
+                      />
+                    </label>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="grid two">
+              <article className="panel">
+                <h2>参考文献</h2>
+                <label>
+                  <span>每行一条</span>
+                  <textarea
+                    rows={10}
+                    value={referencesToString(currentThesis)}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        references: {
+                          items: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
+                        },
+                      }))
+                    }
+                  />
+                </label>
+              </article>
+
+              <article className="panel">
+                <h2>致谢与附录</h2>
+                <label>
+                  <span>致谢</span>
+                  <textarea
+                    rows={5}
+                    value={currentThesis.acknowledgements}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        acknowledgements: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>附录</span>
+                  <textarea
+                    rows={5}
+                    value={currentThesis.appendix}
+                    onChange={(event) =>
+                      setThesis((prev) => ({
+                        ...(prev ?? defaultThesis(health)),
+                        appendix: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </article>
+            </section>
+
+            <section className="panel">
+              <div className="section-header">
+                <h2>调试信息</h2>
+                <button type="button" className="secondary-button" onClick={() => setShowDebug((prev) => !prev)}>
+                  {showDebug ? "隐藏" : "显示"} JSON
+                </button>
+              </div>
+              {showDebug ? <pre className="debug-box">{JSON.stringify(currentThesis, null, 2)}</pre> : null}
+            </section>
+          </>
+        ) : null}
+      </main>
     </div>
-  );
-}
-
-function JobPage() {
-  const { jobId } = useParams();
-  const [job, setJob] = useState<JobStatusResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!jobId) return;
-
-    let timer: number | undefined;
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const data = await apiJson<JobStatusResponse>(`/api/jobs/${jobId}`);
-        if (cancelled) return;
-        setJob(data);
-        if (data.status === "queued" || data.status === "processing") {
-          timer = window.setTimeout(load, 1500);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "任务查询失败");
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [jobId]);
-
-  if (error) {
-    return (
-      <div className="page narrow">
-        <Link to="/">返回首页</Link>
-        <div className="error-banner">{error}</div>
-      </div>
-    );
-  }
-
-  if (!job) {
-    return (
-      <div className="page narrow">
-        <Link to="/">返回首页</Link>
-        <p>正在加载任务状态...</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="page narrow">
-      <Link to="/">返回首页</Link>
-      <h1>任务 {job.job_id}</h1>
-      <div className={`status-pill ${job.status}`}>{job.status}</div>
-      <p>输入来源：{job.source_type}</p>
-      <p>模板：{job.template}</p>
-      {job.error_code ? (
-        <div className="error-card">
-          <strong>{job.error_code}</strong>
-          <p>{job.error_message}</p>
-        </div>
-      ) : null}
-      {job.warnings.length > 0 ? (
-        <div className="warning">
-          <strong>提示</strong>
-          <ul>
-            {job.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {job.sections.length > 0 ? (
-        <section className="panel">
-          <h2>识别出的章节</h2>
-          <ul className="section-list">
-            {job.sections.map((section, index) => (
-              <li key={`${section.title}-${index}`}>
-                <strong>{section.kind}</strong> · {section.title}
-                <p>{section.content.slice(0, 160) || "（空内容）"}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {job.artifacts ? (
-        <section className="panel">
-          <h2>导出结果</h2>
-          <div className="actions">
-            <a href={`/api/jobs/${job.job_id}/artifacts/pdf`} target="_blank" rel="noreferrer">
-              下载 PDF
-            </a>
-            <a href={`/api/jobs/${job.job_id}/artifacts/texzip`} target="_blank" rel="noreferrer">
-              下载 tex 工程 zip
-            </a>
-          </div>
-          <p>编译日志：{job.artifacts.compile_log_path || "无"}</p>
-        </section>
-      ) : null}
-      {job.compile_command.length > 0 ? (
-        <section className="panel">
-          <h2>编译命令</h2>
-          <code>{job.compile_command.join(" ")}</code>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-const labelMap: Record<keyof MetaFields, string> = {
-  title: "论文题目",
-  author_name: "学生姓名",
-  student_id: "学号",
-  department: "学院 / 系别",
-  major: "专业",
-  class_name: "班级",
-  advisor_name: "指导老师",
-  submission_date: "日期",
-};
-
-const structuredFieldOrder: (keyof StructuredFields)[] = [
-  "abstract_cn",
-  "abstract_en",
-  "keywords_cn",
-  "keywords_en",
-  "body",
-  "references",
-  "acknowledgements",
-  "appendix",
-];
-
-const structuredLabelMap: Record<keyof StructuredFields, string> = {
-  ...labelMap,
-  abstract_cn: "中文摘要",
-  abstract_en: "英文摘要",
-  keywords_cn: "中文关键词",
-  keywords_en: "英文关键词",
-  body: "正文（支持 Markdown 风格标题）",
-  references: "参考文献（每行一条）",
-  acknowledgements: "致谢",
-  appendix: "附录（可选）",
-};
-
-const longTextFields = new Set<keyof StructuredFields>([
-  "abstract_cn",
-  "abstract_en",
-  "body",
-  "references",
-  "acknowledgements",
-  "appendix",
-]);
-
-export function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<AppHome />} />
-      <Route path="/jobs/:jobId" element={<JobPage />} />
-    </Routes>
   );
 }
