@@ -18,7 +18,7 @@ npm install
 
 ```bash
 cd /Users/ethan/scnu-thesis-portal
-uv run --project backend uvicorn backend.app.main:app --reload --port 8000
+uv run --project backend uvicorn app.main:app --reload --port 8000
 ```
 
 ## 4. 启动前端
@@ -44,3 +44,15 @@ npm run build
 - 当前不保留原 Word 样式
 - 当前依赖本地 XeLaTeX 环境
 - 如果缺少 TeX 宏包，接口会返回明确错误
+
+## 7. 如缺少 TeX 宏包
+
+当前模板主线至少依赖 `titlesec` 包。
+
+如果本机是 TeX Live 2025 user tree，可用：
+
+```bash
+tlmgr init-usertree
+tlmgr --usermode option repository https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final
+tlmgr --usermode install titlesec
+```
