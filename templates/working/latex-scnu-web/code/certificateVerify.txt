@@ -1,4 +1,0 @@
-struct {
-    SignatureScheme algorithm;
-    opaque signature<0..2^16-1>;
-} CertificateVerify;
