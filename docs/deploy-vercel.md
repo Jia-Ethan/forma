@@ -57,7 +57,7 @@ vercel
 
 当前预览地址：
 
-- https://scnu-thesis-portal-exgypusjz-jia-ethans-projects.vercel.app
+- https://scnu-thesis-portal-git-feat-vercel-l-e3191b-jia-ethans-projects.vercel.app
 
 如果预览环境出现 SSO 登录页，需要在 Vercel 项目中关闭 preview deployment 的 SSO protection，或提供 bypass 链接后再验收。
 

@@ -33,7 +33,7 @@
 
 ## Vercel 预览环境
 
-- [x] preview URL 可访问：`https://scnu-thesis-portal-exgypusjz-jia-ethans-projects.vercel.app`
+- [x] preview URL 可访问：`https://scnu-thesis-portal-git-feat-vercel-l-e3191b-jia-ethans-projects.vercel.app`
 - [x] 首页展示支持范围与不支持范围
 - [x] 上传 `.docx` 后可通过 `/api/parse/docx` 看到识别结果
 - [x] 粘贴正文后可通过 `/api/normalize/text` 看到识别结果
