@@ -23,7 +23,7 @@
 
 - `web/`：React + Vite 前端
 - `backend/`：Python 业务逻辑与 API
-- `api/`：Vercel Python 入口
+- `index.py`：Vercel FastAPI 入口
 - `templates/working/latex-scnu-web/`：当前首轮主线工作模板
 - `templates/upstream/`：保留的上游参考模板
 - `docs/`：审查、范围、部署、验收文档

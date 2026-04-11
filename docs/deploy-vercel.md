@@ -4,7 +4,7 @@
 
 - 一个 Vercel 项目
 - 根级 `public/` 提供静态前端
-- 根级 `/api/index.py` 提供 Python FastAPI 接口
+- 根级 `index.py` 提供 Python FastAPI 接口，`/api/*` rewrite 到该入口
 - 生产环境默认只承诺 `.tex` 工程 zip 导出
 
 ## 首次部署

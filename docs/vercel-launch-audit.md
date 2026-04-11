@@ -182,7 +182,7 @@
 
 - 现状：Python 配置在 `backend/`，前端静态文件由 FastAPI 挂载
 - 风险：Vercel 难以直接把仓库识别为“静态前端 + Python API”
-- 处理策略：新增根级 `pyproject.toml`、`api/index.py`、`vercel.json`、`public/`
+- 处理策略：新增根级 `pyproject.toml`、`index.py`、`vercel.json`、`public/`。Vercel 2026 年 FastAPI 文档要求在根级或 `src/` 等框架入口暴露 `app`，因此不采用 `api/index.py` 作为 FastAPI 主入口。
 
 ### 阻塞点 6：模板工作目录过胖
 

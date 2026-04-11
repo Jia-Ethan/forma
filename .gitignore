@@ -46,3 +46,4 @@ web/dist/
 *.tsbuildinfo
 public/
 .vercel/
+.vercel
