@@ -24,6 +24,7 @@ try:
     from .frontend_bundle import ASSETS as BUNDLED_ASSETS
     from .frontend_bundle import INDEX_HTML as BUNDLED_INDEX_HTML
 except ImportError:
+    # Local development can run the API before the Vite build exists.
     BUNDLED_ASSETS = {}
     BUNDLED_INDEX_HTML = None
 
@@ -163,12 +164,12 @@ def serve_spa_index() -> Response:
 
 
 @app.get("/", include_in_schema=False)
-def frontend_root() -> FileResponse:
+def frontend_root() -> Response:
     return serve_spa_index()
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
-def frontend_fallback(full_path: str) -> FileResponse:
+def frontend_fallback(full_path: str) -> Response:
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not Found")
     return serve_spa_index()

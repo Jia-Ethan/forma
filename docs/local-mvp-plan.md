@@ -1,5 +1,7 @@
 # 本地 MVP 方案
 
+> 历史阶段记录：本文档保留本地 demo 方案，不再代表当前产品主路径。当前主线见 `docs/architecture-mainline-v1.md`。
+
 ## 1. 架构图（文字版）
 
 前端 `web/`：
