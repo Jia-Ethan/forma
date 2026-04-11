@@ -12,6 +12,12 @@ OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 DEBUG_OUTPUTS_DIR = OUTPUTS_DIR / "debug"
 
 ALLOWED_DOCX_EXTENSIONS = {".docx"}
+ALLOWED_DOCX_CONTENT_TYPES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream",
+    "application/zip",
+    "",
+}
 APP_ENV = os.getenv("APP_ENV", "development").strip().lower() or "development"
 TEMPLATE_NAME = "latex-scnu-web"
 
@@ -23,9 +29,31 @@ def read_bool_env(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_DOCX_SIZE_BYTES", str(4 * 1024 * 1024)))
+def read_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def read_csv_env(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+MAX_UPLOAD_SIZE_BYTES = read_int_env("MAX_DOCX_SIZE_BYTES", 4 * 1024 * 1024)
 ENABLE_PDF_EXPORT = read_bool_env("ENABLE_PDF_EXPORT", APP_ENV != "production")
 DEBUG_PERSIST_ARTIFACTS = read_bool_env("SCNU_DEBUG_PERSIST_ARTIFACTS", False)
+CORS_ALLOWED_ORIGINS = read_csv_env(
+    "CORS_ALLOWED_ORIGINS",
+    ["http://127.0.0.1:5173", "http://localhost:5173"] if APP_ENV != "production" else [],
+)
 
 TEX_REQUIRED_STYLES = [
     "ctex.sty",

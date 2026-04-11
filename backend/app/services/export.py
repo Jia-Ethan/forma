@@ -193,6 +193,13 @@ def prepare_worktree(target_dir: Path) -> Path:
     return work_dir
 
 
+def safe_relative_path(file_path: Path, root: Path) -> Path:
+    try:
+        return file_path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise AppError("EXPORT_FAILED", "导出 tex 工程失败：发现不安全的模板路径。", status_code=500) from exc
+
+
 def write_generated_files(work_dir: Path, thesis: NormalizedThesis) -> None:
     (work_dir / "cover" / "image.tex").write_text(render_cover_tex(thesis), encoding="utf-8")
     (work_dir / "abstract" / "abstract-zh-CN.tex").write_text(
@@ -214,8 +221,10 @@ def zip_worktree_bytes(work_dir: Path) -> bytes:
     buffer = io.BytesIO()
     with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as zf:
         for file_path in sorted(work_dir.rglob("*")):
+            if file_path.is_symlink():
+                continue
             if file_path.is_file():
-                zf.write(file_path, file_path.relative_to(work_dir))
+                zf.write(file_path, safe_relative_path(file_path, work_dir))
     return buffer.getvalue()
 
 

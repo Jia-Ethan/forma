@@ -91,7 +91,7 @@ def parse_docx_file(path: Path, capabilities: CapabilityFlags) -> NormalizedThes
     try:
         document = Document(path)
     except Exception as exc:  # pragma: no cover
-        raise AppError("DOCX_INVALID", "无法解析上传的 .docx 文件", details={"reason": str(exc)}, status_code=400) from exc
+        raise AppError("PARSE_FAILED", "无法读取这个 .docx 的正文内容，请确认文件未损坏。", details={"reason": str(exc)}, status_code=400) from exc
 
     paragraphs: List[Tuple[str, Optional[str]]] = []
     for paragraph in document.paragraphs:

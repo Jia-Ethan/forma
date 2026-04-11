@@ -78,10 +78,3 @@ class HealthResponse(BaseModel):
 
 class TextNormalizeRequest(BaseModel):
     text: str
-
-    @field_validator("text")
-    @classmethod
-    def require_text(cls, value: str) -> str:
-        if not value or not value.strip():
-            raise ValueError("text 不能为空")
-        return value

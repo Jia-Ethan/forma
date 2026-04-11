@@ -13,7 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import ALLOWED_DOCX_EXTENSIONS, APP_ENV, ENABLE_PDF_EXPORT, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME
+from .config import (
+    ALLOWED_DOCX_CONTENT_TYPES,
+    ALLOWED_DOCX_EXTENSIONS,
+    APP_ENV,
+    CORS_ALLOWED_ORIGINS,
+    ENABLE_PDF_EXPORT,
+    MAX_UPLOAD_SIZE_BYTES,
+    TEMPLATE_NAME,
+)
 from .contracts import CapabilityFlags, HealthResponse, NormalizedThesis, ServiceLimits, TextNormalizeRequest
 from .errors import AppError
 from .services.export import export_texzip
@@ -46,12 +54,13 @@ app = FastAPI(title="SCNU Thesis Portal", lifespan=lifespan)
 if PUBLIC_ASSETS.exists():
     app.mount("/assets", StaticFiles(directory=PUBLIC_ASSETS), name="assets")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if CORS_ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ALLOWED_ORIGINS,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.exception_handler(AppError)
@@ -102,13 +111,17 @@ def health() -> HealthResponse:
 async def parse_docx(file: UploadFile = File(...)) -> NormalizedThesis:
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_DOCX_EXTENSIONS:
-        raise AppError("UNSUPPORTED_FILE_TYPE", "仅支持上传 .docx 文件", status_code=400)
+        raise AppError("UNSUPPORTED_FILE_TYPE", "请上传 .docx 文件，暂不支持 .doc 或其他格式。", status_code=400)
+    if (file.content_type or "") not in ALLOWED_DOCX_CONTENT_TYPES:
+        raise AppError("UNSUPPORTED_FILE_TYPE", "文件类型不符合 .docx，请重新选择 Word 文档。", status_code=400)
 
     payload = await file.read()
     if not payload:
-        raise AppError("CONTENT_EMPTY", "上传文件为空", status_code=400)
+        raise AppError("CONTENT_EMPTY", "上传文件为空，请选择包含论文内容的 .docx 文件。", status_code=400)
     if len(payload) > MAX_UPLOAD_SIZE_BYTES:
-        raise AppError("DOCX_INVALID", "上传文件过大", status_code=400)
+        raise AppError("FILE_TOO_LARGE", "文件超过当前上传大小限制，请压缩或删减后再试。", status_code=400)
+    if not payload.startswith(b"PK"):
+        raise AppError("DOCX_INVALID", "上传文件不是有效的 .docx 文档，请确认文件未损坏。", status_code=400)
 
     with tempfile.TemporaryDirectory(prefix="scnu-parse-docx-") as tmp:
         upload_path = Path(tmp) / "input.docx"
@@ -118,6 +131,8 @@ async def parse_docx(file: UploadFile = File(...)) -> NormalizedThesis:
 
 @app.post("/api/normalize/text", response_model=NormalizedThesis)
 def normalize_text(request: TextNormalizeRequest) -> NormalizedThesis:
+    if not request.text.strip():
+        raise AppError("CONTENT_EMPTY", "粘贴内容为空，请先输入论文正文或章节内容。", status_code=400)
     return normalize_text_input(request.text, capability_flags())
 
 
@@ -149,7 +164,11 @@ def frontend_asset(asset_path: str) -> Response:
             content=b64decode(bundled_asset["body_b64"]),
             media_type=bundled_asset["content_type"],
         )
-    asset_file = PUBLIC_ASSETS / asset_path
+    try:
+        asset_file = (PUBLIC_ASSETS / asset_path).resolve()
+        asset_file.relative_to(PUBLIC_ASSETS.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not Found") from None
     if asset_file.exists() and asset_file.is_file():
         return FileResponse(asset_file)
     raise HTTPException(status_code=404, detail="Not Found")

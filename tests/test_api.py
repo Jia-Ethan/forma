@@ -5,6 +5,7 @@ import io
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.services.export import zip_worktree_bytes
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-thesis.docx"
 
@@ -71,6 +72,57 @@ def test_docx_endpoint_rejects_non_docx_upload():
     assert response.json()["error_code"] == "UNSUPPORTED_FILE_TYPE"
 
 
+def test_docx_endpoint_rejects_wrong_content_type():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/parse/docx",
+            files={"file": ("bad.docx", b"PKfake", "text/plain")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "UNSUPPORTED_FILE_TYPE"
+
+
+def test_docx_endpoint_rejects_empty_file():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/parse/docx",
+            files={"file": ("empty.docx", b"", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "CONTENT_EMPTY"
+
+
+def test_docx_endpoint_rejects_oversized_file(monkeypatch):
+    monkeypatch.setattr("backend.app.main.MAX_UPLOAD_SIZE_BYTES", 8)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/parse/docx",
+            files={"file": ("large.docx", b"PK" + b"x" * 20, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "FILE_TOO_LARGE"
+
+
+def test_docx_endpoint_rejects_invalid_docx_payload():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/parse/docx",
+            files={"file": ("bad.docx", b"not-a-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "DOCX_INVALID"
+
+
+def test_docx_endpoint_reports_parse_failed_for_broken_zip():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/parse/docx",
+            files={"file": ("broken.docx", b"PKbroken-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "PARSE_FAILED"
+
+
 def test_docx_endpoint_returns_normalized_payload():
     with TestClient(app) as client:
         with FIXTURE.open("rb") as fh:
@@ -99,6 +151,13 @@ def test_text_normalize_returns_body_sections():
     assert payload["references"]["items"]
 
 
+def test_text_normalize_rejects_empty_content():
+    with TestClient(app) as client:
+        response = client.post("/api/normalize/text", json={"text": "   \n\t"})
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "CONTENT_EMPTY"
+
+
 def test_export_texzip_returns_zip_payload():
     with TestClient(app) as client:
         response = client.post("/api/export/texzip", json=sample_payload())
@@ -112,9 +171,32 @@ def test_export_texzip_returns_zip_payload():
     assert "cover/image.tex" in names
 
 
+def test_export_texzip_rejects_missing_required_fields():
+    payload = sample_payload()
+    payload["metadata"]["title"] = ""
+    with TestClient(app) as client:
+        response = client.post("/api/export/texzip", json=payload)
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "FIELD_MISSING"
+    assert "title" in response.json()["details"]["missing_fields"]
+
+
 def test_export_pdf_returns_disabled_when_feature_is_off(monkeypatch):
     monkeypatch.setattr("backend.app.services.pdf.ENABLE_PDF_EXPORT", False)
     with TestClient(app) as client:
         response = client.post("/api/export/pdf", json=sample_payload())
     assert response.status_code == 400
     assert response.json()["error_code"] == "PDF_DISABLED"
+
+
+def test_texzip_skips_symlinks(tmp_path):
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / "main.tex").write_text("hello", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    (work_dir / "outside-link.txt").symlink_to(outside)
+
+    archive = ZipFile(io.BytesIO(zip_worktree_bytes(work_dir)))
+    assert "main.tex" in archive.namelist()
+    assert "outside-link.txt" not in archive.namelist()
