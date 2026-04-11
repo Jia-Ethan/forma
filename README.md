@@ -32,6 +32,13 @@
 
 界面风格以浅色背景、细描边、轻阴影、克制的蓝色强调和短动效为主。玻璃材质只用于首屏状态与轻量反馈，不影响论文编辑区的可读性。
 
+当前已补齐的前端工程能力：
+
+- 请求逻辑、论文编辑状态、导出流程和 UI 组件已拆分，不再由 `App.tsx` 单文件承担全部职责
+- 导出 `.tex` 工程 zip 前会在前端校验核心封面字段；缺少题目、姓名、学号、学院 / 系别、专业、导师或提交日期时，不会发起导出请求
+- 班级等非核心字段作为建议补全项提示，不阻塞导出
+- 前端测试覆盖字段校验、metadata 更新后的导出 payload、章节编辑、关键词 / 参考文献转换、解析异常和导出主路径
+
 ## 当前明确不支持
 
 - 不支持 `.doc`
@@ -57,6 +64,8 @@ flowchart LR
 3. 点击“开始识别”，查看系统识别出的摘要、章节、参考文献等结构。
 4. 在 review 区补全题目、姓名、学号、学院、导师、日期等封面字段。
 5. 点击“导出 `.tex` 工程 zip”。
+
+当前最稳定路径是：上传 / 粘贴 → 识别 → review → 导出 `.tex zip`。PDF 在生产环境默认关闭，不作为线上主路径。
 
 ## 本地运行
 
@@ -111,12 +120,30 @@ PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 - `examples/`：示例输入与输出说明
 - `tests/`：后端 API、解析与导出测试
 
+## 当前主线范围 / 非主线目录说明
+
+当前有效主线只依赖：
+
+- `web/`：React 前端工作台
+- `backend/`：FastAPI API 与解析 / 导出服务
+- `templates/working/latex-scnu-web/`：线上导出使用的工作模板
+- `scripts/generate_frontend_types.py`：从后端 schema 生成前端 contract types
+- `scripts/build_web_public.py`：Vercel 打包前端静态资源
+- `tests/` 与 `web/src/**/*.test.*`：后端和前端护栏测试
+
+以下目录不参与线上主路径：
+
+- `templates/upstream/`：上游 SCNU / LaTeX 模板参考材料，保留用于比对和后续授权梳理，不作为当前导出模板
+- `archive/`：历史整理占位，不作为运行路径
+- `outputs/`、`tmp/`：本地运行和调试产物目录，`.gitignore` 只保留 `.gitkeep`，具体生成内容不应进入主仓库
+- `examples/`：示例输入 / 输出说明，用于人工验收和文档参考，不参与线上请求链路
+
 ## 质量状态
 
 当前最小护栏：
 
 - `uv run pytest tests -q`：16 passed
-- `npm run test:smoke --prefix web`：1 passed
+- `npm run test --prefix web`：15 passed
 - `vercel build`：通过
 - 生产依赖 audit：0 vulnerabilities
 
