@@ -35,6 +35,14 @@ MAX_DOCX_SIZE_BYTES=4194304
 SCNU_DEBUG_PERSIST_ARTIFACTS=1
 ```
 
+Vercel 当前会把 FastAPI 项目的 Install Command 识别为：
+
+```bash
+pip install -r requirements.txt
+```
+
+因此仓库根目录保留 `requirements.txt` 作为 Vercel 云端安装入口；本地开发仍优先使用 `uv sync --extra dev`。
+
 ## 预览部署
 
 ```bash
