@@ -1,8 +1,17 @@
-# 本地开发说明
+# SC-TH 本地运行说明
 
-> 本文件只描述本地开发和本地演示方式。当前产品主线以线上同步解析、网页 review / 修正、导出 `.tex` 工程 zip 为准；历史 job polling demo 不再作为主路径。
+本文件只描述本地开发与本地验收方式。当前产品主线是：
 
-## 1. 安装依赖
+`上传 .docx / 粘贴文本 → 预检确认弹窗 → 海浪导出进度 → 自动下载 .docx`
+
+## 依赖
+
+- Python 3.12
+- Node.js 20+
+- `uv`
+- `npm`
+
+安装依赖：
 
 ```bash
 cd /Users/ethan/scnu-thesis-portal
@@ -10,55 +19,50 @@ uv sync --extra dev
 npm install --prefix web
 ```
 
-## 2. 启动后端
+## 本地开发
+
+启动后端：
 
 ```bash
-cd /Users/ethan/scnu-thesis-portal
 uv run uvicorn backend.app.main:app --reload --port 8000
 ```
 
-## 3. 启动前端
+启动前端：
 
 ```bash
-cd /Users/ethan/scnu-thesis-portal
 npm run dev --prefix web
 ```
 
-## 4. 生成静态前端并模拟 Vercel
+默认访问：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8000`
+
+## 本地构建
+
+生成前端类型：
 
 ```bash
-cd /Users/ethan/scnu-thesis-portal
-uv run python scripts/generate_frontend_types.py
+python3 scripts/generate_frontend_types.py
+```
+
+构建前端并写入 `public/`：
+
+```bash
 python3 scripts/build_web_public.py
-PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 ```
 
-如果本机默认 `python3` 仍是 3.9 或更低，`vercel dev` 的 Python Function 本地启动会失败。当前仓库已经锁定到 Python 3.12，因此本地模拟时建议显式把 `uv` 管理的 3.12 放到 `PATH` 前面。
+## 本地验证
 
-## 5. 本地 PDF 能力
+推荐至少走这几步：
 
-本地环境默认允许尝试导出 PDF，但前提是：
+1. 上传合法 `.docx`
+2. 粘贴足量文本
+3. 查看预检确认弹窗
+4. 验证阻塞项禁用确认按钮
+5. 取消返回首页并保留输入
+6. 通过预检后进入海浪进度
+7. 自动下载 `.docx`
+8. 验证非法格式、空输入、模板缺失等错误提示
 
-- 已安装 `xelatex`
-- 已安装 `kpsewhich`
-- TeX 宏包至少包含 `ctex`、`titlesec`、`titletoc`
-
-如需明确关闭本地 PDF：
-
-```bash
-export ENABLE_PDF_EXPORT=0
-```
-
-如需保留调试产物：
-
-```bash
-export SCNU_DEBUG_PERSIST_ARTIFACTS=1
-```
-
-## 6. 本地验收
-
-```bash
-cd /Users/ethan/scnu-thesis-portal
-uv run pytest tests -q
-npm run test:smoke --prefix web
-```
+详细验收项见 `docs/local-validation-word.md`。

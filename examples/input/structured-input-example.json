@@ -7,12 +7,12 @@
   "class_name": "网络工程 1 班",
   "advisor_name": "李老师",
   "submission_date": "2026-04-10",
-  "abstract_cn": "本文展示本地 MVP 如何把结构化输入映射为论文模板工程，并在本地生成 PDF。",
-  "abstract_en": "This sample demonstrates how the local MVP maps structured content into a thesis template and compiles it into a PDF.",
+  "abstract_cn": "本文展示 SC-TH 如何把结构化输入映射为本科论文 Word 文档，并在导出前完成一次预检确认。",
+  "abstract_en": "This sample demonstrates how SC-TH maps structured content into an undergraduate thesis Word document after a precheck step.",
   "keywords_cn": "论文模板，本地生成，结构化映射",
   "keywords_en": "thesis template, local generation, structured mapping",
-  "body": "# 引言\n本示例用于验证结构化输入链路。\n\n# 方案设计\n## 输入方式\n系统支持结构化输入和 docx 上传。\n\n## 输出方式\n系统输出 PDF 与 tex 工程 zip。\n\n# 总结\n本地 MVP 以稳定主线为优先。",
-  "references": "【1】教育部. 本科毕业论文写作规范.\n【2】示例作者. LaTeX 模板实践.",
+  "body": "# 引言\n本示例用于验证结构化输入链路。\n\n# 方案设计\n## 输入方式\n系统支持结构化输入和 docx 上传。\n\n## 输出方式\n系统输出经过预检的 Word 论文文件。\n\n# 总结\n当前主线以极简输入、预检确认和稳定导出为优先。",
+  "references": "【1】教育部. 本科毕业论文写作规范.\n【2】示例作者. Word 模板实践.",
   "acknowledgements": "感谢导师和同学提供反馈。",
   "appendix": "附录 A：示例附加说明。"
 }
