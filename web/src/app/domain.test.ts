@@ -1,4 +1,4 @@
-import { keywordsToString, referencesToString, splitKeywords, splitReferences, validateExportReadiness } from "./domain";
+import { keywordsToString, referencesToString, reviewCompletion, reviewInsights, splitKeywords, splitReferences, validateExportReadiness } from "./domain";
 import { sampleThesis } from "../test/fixtures";
 
 describe("domain helpers", () => {
@@ -34,5 +34,28 @@ describe("domain helpers", () => {
     expect(readiness.canExport).toBe(false);
     expect(readiness.missingRequired.map((item) => item.field)).toEqual(["title"]);
     expect(readiness.missingRecommended.map((item) => item.field)).toEqual(["class_name"]);
+  });
+
+  it("builds review completion and insight summaries from thesis readiness", () => {
+    const thesis = sampleThesis({
+      metadata: {
+        title: "",
+        class_name: "",
+      },
+      warnings: ["参考文献边界可能需要人工确认。"],
+    });
+    const readiness = validateExportReadiness(thesis);
+
+    expect(reviewCompletion(thesis, readiness)).toMatchObject({
+      percent: 86,
+      missingRequired: 1,
+      missingRecommended: 1,
+    });
+
+    expect(reviewInsights(thesis, readiness).map((item) => item.title)).toEqual([
+      "导出仍被阻塞",
+      "有建议补全项",
+      "有结构提示待确认",
+    ]);
   });
 });

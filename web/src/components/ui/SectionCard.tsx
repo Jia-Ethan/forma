@@ -7,11 +7,20 @@ type SectionCardProps = {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  tone?: "default" | "editor" | "feature" | "accent" | "critical" | "muted";
 };
 
-export function SectionCard({ title, eyebrow, description, action, children, className = "" }: SectionCardProps) {
+export function SectionCard({
+  title,
+  eyebrow,
+  description,
+  action,
+  children,
+  className = "",
+  tone = "default",
+}: SectionCardProps) {
   return (
-    <section className={`section-card ${className}`.trim()}>
+    <section className={`section-card section-card-${tone} ${className}`.trim()}>
       {(title || eyebrow || description || action) && (
         <div className="section-card-header">
           <div>

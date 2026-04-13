@@ -1,8 +1,6 @@
 export { PrimaryButton, SecondaryButton, GhostDangerButton } from "./Button";
-export { CapabilityCard } from "./CapabilityCard";
 export { EmptyState } from "./EmptyState";
 export { FieldGroup } from "./FieldGroup";
-export { GlassPanel } from "./GlassPanel";
 export { InfoNotice } from "./InfoNotice";
 export { SectionCard } from "./SectionCard";
 export { SegmentedControl } from "./SegmentedControl";

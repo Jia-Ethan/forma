@@ -90,11 +90,14 @@ describe("App smoke", () => {
 
     render(<App />);
 
-    expect(screen.getByText("把论文内容带入清晰、可校对的模板工程。")).toBeInTheDocument();
-    expect(screen.getByText("上传内容")).toBeInTheDocument();
-    expect(screen.getByText("识别结构")).toBeInTheDocument();
-    expect(screen.getByText("校对字段")).toBeInTheDocument();
-    expect(screen.getByText("导出工程")).toBeInTheDocument();
+    expect(screen.getByText("把论文内容整理成可校对、可导出的学术工作台。")).toBeInTheDocument();
+    expect(screen.getAllByText("上传 .docx").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("粘贴正文").length).toBeGreaterThan(0);
+    expect(screen.getByText("当前能力、边界与推荐路径")).toBeInTheDocument();
+    expect(screen.getByText("输入内容")).toBeInTheDocument();
+    expect(screen.getByText("结构识别")).toBeInTheDocument();
+    expect(screen.getByText("校对修正")).toBeInTheDocument();
+    expect(screen.getByText("导出成果")).toBeInTheDocument();
 
     await waitForHealthCard();
     expect(screen.getByText("上传上限：4 MB")).toBeInTheDocument();
@@ -159,6 +162,8 @@ describe("App smoke", () => {
     expect(screen.getByRole("button", { name: "导出 .tex 工程 zip" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "导出 PDF" })).toBeDisabled();
     expect(screen.getByText("PDF 当前未开启")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前完成度 100%")).toBeInTheDocument();
+    expect(screen.getByText("导出状态")).toBeInTheDocument();
     expect(screen.getByText("请先校对字段与章节，再导出 .tex 工程 zip。")).toBeInTheDocument();
   });
 });

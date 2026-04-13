@@ -6,7 +6,7 @@ export type ExportKind = "tex" | "pdf";
 export type WorkspaceStep = "input" | "recognizing" | "review" | "export";
 
 export type ToastState = {
-  tone: "success" | "info";
+  tone: "success" | "info" | "warning" | "danger";
   title: string;
   message: string;
 } | null;
@@ -28,6 +28,12 @@ export type ExportReadiness = {
   canExport: boolean;
   missingRequired: MetadataFieldRule[];
   missingRecommended: MetadataFieldRule[];
+};
+
+export type ReviewInsight = {
+  tone: "success" | "info" | "warning" | "danger";
+  title: string;
+  message: string;
 };
 
 export const metadataFieldRules: MetadataFieldRule[] = [
@@ -66,6 +72,18 @@ export function validateExportReadiness(thesis: NormalizedThesis): ExportReadine
 
 export function formatFieldList(fields: MetadataFieldRule[]) {
   return fields.map((field) => field.label).join("、");
+}
+
+export function inputModeSummary(mode: InputMode) {
+  return mode === "docx"
+    ? {
+        title: "上传 .docx",
+        description: "适合已有论文文档，先抽取结构骨架，再进入校对工作台。",
+      }
+    : {
+        title: "粘贴正文",
+        description: "适合快速整理摘要、章节和参考文献，再手动补全字段。",
+      };
 }
 
 export function defaultThesis(health: HealthResponse | null): NormalizedThesis {
@@ -131,6 +149,82 @@ export function formatBytes(bytes?: number) {
   if (!bytes) return "加载中";
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${Math.floor(bytes / 1024 / 1024)} MB`;
+}
+
+export function countFilledMetadata(metadata: MetadataFields) {
+  return metadataFieldRules.filter(({ field }) => String(metadata[field] ?? "").trim()).length;
+}
+
+export function reviewCompletion(thesis: NormalizedThesis, readiness: ExportReadiness) {
+  const metadataCompleted = countFilledMetadata(thesis.metadata);
+  const metadataTotal = metadataFieldRules.length;
+  const abstractCompleted = Number(Boolean(thesis.abstract_cn.content)) + Number(Boolean(thesis.abstract_en.content));
+  const structureCompleted =
+    Number(thesis.body_sections.length > 0) +
+    Number(thesis.references.items.length > 0) +
+    Number(Boolean(thesis.acknowledgements)) +
+    Number(Boolean(thesis.appendix));
+  const total = metadataTotal + 2 + 4;
+  const done = metadataCompleted + abstractCompleted + structureCompleted;
+  const percent = Math.round((done / total) * 100);
+
+  return {
+    percent,
+    done,
+    total,
+    missingRequired: readiness.missingRequired.length,
+    missingRecommended: readiness.missingRecommended.length,
+  };
+}
+
+export function reviewInsights(thesis: NormalizedThesis, readiness: ExportReadiness): ReviewInsight[] {
+  const insights: ReviewInsight[] = [];
+
+  if (!readiness.canExport) {
+    insights.push({
+      tone: "warning",
+      title: "导出仍被阻塞",
+      message: `还缺 ${formatFieldList(readiness.missingRequired)}。`,
+    });
+  } else {
+    insights.push({
+      tone: "success",
+      title: "已经可以导出 .tex 工程",
+      message: "建议最后再检查摘要、章节标题和参考文献。",
+    });
+  }
+
+  if (readiness.missingRecommended.length > 0) {
+    insights.push({
+      tone: "info",
+      title: "有建议补全项",
+      message: `${formatFieldList(readiness.missingRecommended)} 不阻塞导出，但会影响模板完整度。`,
+    });
+  }
+
+  if (thesis.parse_errors.length > 0) {
+    insights.push({
+      tone: "danger",
+      title: "解析结果需要人工校核",
+      message: `检测到 ${thesis.parse_errors.length} 条解析提示，请优先检查正文与引用边界。`,
+    });
+  } else if (thesis.warnings.length > 0) {
+    insights.push({
+      tone: "warning",
+      title: "有结构提示待确认",
+      message: `当前有 ${thesis.warnings.length} 条提醒，建议在导出前逐项确认。`,
+    });
+  }
+
+  if (thesis.body_sections.length === 0) {
+    insights.push({
+      tone: "warning",
+      title: "正文结构为空",
+      message: "还没有可导出的章节结构，建议返回输入区重新识别或手动新增章节。",
+    });
+  }
+
+  return insights.slice(0, 4);
 }
 
 export function friendlyError(error: ApiError | null): FriendlyError | null {

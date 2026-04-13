@@ -9,7 +9,12 @@ type ReferencesEditorProps = {
 
 export function ReferencesEditor({ thesis, onChange }: ReferencesEditorProps) {
   return (
-    <SectionCard title="参考文献" eyebrow="References" description="每行保留一条参考文献，导出时会写入模板工程。">
+    <SectionCard
+      title="参考文献"
+      eyebrow="References"
+      description="每行保留一条参考文献。这里更适合做结构校正，而不是追求最终排版样式。"
+      tone="editor"
+    >
       <FieldGroup label="每行一条" htmlFor="references-items">
         <textarea
           id="references-items"

@@ -16,8 +16,9 @@ export function ExportPanel({ thesis, readiness, exporting, onExport }: ExportPa
     <SectionCard
       title="导出成果"
       eyebrow="最终产物"
-      description="当前主产物是可继续调整的 LaTeX 工程。"
+      description="把导出当成一次提交动作：先看阻塞项，再决定是否生成产物。"
       className="export-panel"
+      tone="critical"
     >
       <div className="export-product">
         <div>
@@ -26,6 +27,21 @@ export function ExportPanel({ thesis, readiness, exporting, onExport }: ExportPa
           <p>包含 normalized 内容映射后的模板工程，适合本地编译或人工继续修正。</p>
         </div>
         <StatusBadge tone="success">主路径</StatusBadge>
+      </div>
+
+      <div className="export-readiness">
+        <div>
+          <span>导出状态</span>
+          <strong>{readiness.canExport ? "可以导出" : "仍需补齐字段"}</strong>
+        </div>
+        <div>
+          <span>必填字段</span>
+          <strong>{readiness.missingRequired.length === 0 ? "已完成" : `缺 ${readiness.missingRequired.length} 项`}</strong>
+        </div>
+        <div>
+          <span>建议检查</span>
+          <strong>{readiness.missingRecommended.length === 0 ? "已完成" : `${readiness.missingRecommended.length} 项`}</strong>
+        </div>
       </div>
 
       <div className="export-actions">

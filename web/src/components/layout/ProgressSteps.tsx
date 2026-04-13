@@ -15,23 +15,26 @@ export function ProgressSteps({ step }: ProgressStepsProps) {
   const activeIndex = stepIndex(step);
 
   return (
-    <nav className="progress-steps" aria-label="处理步骤">
+    <nav className="progress-shell" aria-label="处理步骤">
+      <ol className="progress-steps">
       {steps.map((item, index) => {
         const state = index < activeIndex ? "done" : index === activeIndex ? "current" : "upcoming";
         return (
-          <div
+          <li
             key={item.key}
             className={`progress-step progress-step-${state}`}
             aria-current={state === "current" ? "step" : undefined}
           >
             <span className="progress-step-marker">{index + 1}</span>
-            <span>
+            <span className="progress-step-copy">
+              <small>阶段 {index + 1}</small>
               <strong>{item.label}</strong>
-              <small>{item.description}</small>
+              <p>{item.description}</p>
             </span>
-          </div>
+          </li>
         );
       })}
+      </ol>
     </nav>
   );
 }

@@ -12,9 +12,16 @@ type MetadataEditorProps = {
 export function MetadataEditor({ metadata, readiness, onChange }: MetadataEditorProps) {
   const missingRequired = new Set(readiness.missingRequired.map((item) => item.field));
   const missingRecommended = new Set(readiness.missingRecommended.map((item) => item.field));
+  const completed = metadataFieldRules.length - readiness.missingRequired.length - readiness.missingRecommended.length;
 
   return (
-    <SectionCard title="封面字段" eyebrow="Metadata" description="这些字段会进入模板工程，请先补齐基础信息。">
+    <SectionCard
+      title="封面字段"
+      eyebrow="Metadata"
+      description="这些字段会进入模板工程，也是导出前最需要确认的一组信息。"
+      tone="feature"
+      action={<StatusBadge tone={readiness.canExport ? "success" : "warning"}>{completed}/{metadataFieldRules.length} 已补齐</StatusBadge>}
+    >
       <div className="form-grid">
         {metadataFieldRules.map(({ field, label, required }) => {
           const id = `metadata-${field}`;

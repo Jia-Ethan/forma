@@ -181,6 +181,15 @@ def test_export_texzip_rejects_missing_required_fields():
     assert "title" in response.json()["details"]["missing_fields"]
 
 
+def test_export_texzip_allows_missing_recommended_class_name():
+    payload = sample_payload()
+    payload["metadata"]["class_name"] = ""
+    with TestClient(app) as client:
+        response = client.post("/api/export/texzip", json=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+
+
 def test_export_pdf_returns_disabled_when_feature_is_off(monkeypatch):
     monkeypatch.setattr("backend.app.services.pdf.ENABLE_PDF_EXPORT", False)
     with TestClient(app) as client:

@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
+
 type StatusBadgeProps = {
   tone?: "neutral" | "success" | "warning" | "danger" | "info";
-  children: string;
+  children: ReactNode;
 };
 
 export function StatusBadge({ tone = "neutral", children }: StatusBadgeProps) {

@@ -9,7 +9,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   if (!toast) return null;
 
   return (
-    <div className={`toast toast-${toast.tone}`} role="status" aria-live="polite">
+    <div className={`toast toast-${toast.tone}`} role={toast.tone === "danger" ? "alert" : "status"} aria-live="polite">
       <div>
         <strong>{toast.title}</strong>
         <p>{toast.message}</p>

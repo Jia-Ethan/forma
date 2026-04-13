@@ -8,7 +8,7 @@ type AppendixEditorProps = {
 
 export function AppendixEditor({ acknowledgements, appendix, onChange }: AppendixEditorProps) {
   return (
-    <SectionCard title="致谢与附录" eyebrow="Closing Sections">
+    <SectionCard title="致谢与附录" eyebrow="Closing Sections" tone="muted" description="收尾内容可以晚一点补，但导出前建议至少快速核对一次。">
       <div className="editor-grid">
         <FieldGroup label="致谢" htmlFor="acknowledgements">
           <textarea

@@ -34,8 +34,10 @@ export function ReviewWorkspace({
       <MetadataEditor metadata={thesis.metadata} readiness={readiness} onChange={updateMetadata} />
       <AbstractEditors abstractCn={thesis.abstract_cn} abstractEn={thesis.abstract_en} onChange={updateAbstract} />
       <SectionsEditor sections={thesis.body_sections} onChange={updateSection} onAdd={addSection} onRemove={removeSection} />
-      <ReferencesEditor thesis={thesis} onChange={updateReferences} />
-      <AppendixEditor acknowledgements={thesis.acknowledgements} appendix={thesis.appendix} onChange={updateLongText} />
+      <div className="review-support-grid">
+        <ReferencesEditor thesis={thesis} onChange={updateReferences} />
+        <AppendixEditor acknowledgements={thesis.acknowledgements} appendix={thesis.appendix} onChange={updateLongText} />
+      </div>
     </div>
   );
 }

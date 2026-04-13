@@ -3,16 +3,17 @@
 }
 
 html {
-  background: var(--color-bg);
+  background: var(--color-page);
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100vh;
   color: var(--color-text);
   background:
-    radial-gradient(circle at 12% 0%, rgba(0, 113, 227, 0.09), transparent 32rem),
-    linear-gradient(180deg, var(--color-bg-soft) 0%, var(--color-bg) 42%, var(--color-bg-wash) 100%);
+    radial-gradient(circle at top left, rgba(47, 95, 168, 0.08), transparent 26rem),
+    linear-gradient(180deg, var(--color-page-soft) 0%, var(--color-page) 45%, var(--color-page-wash) 100%);
   font-family: var(--font-sans);
   line-height: var(--line-normal);
   text-rendering: geometricPrecision;
@@ -39,7 +40,8 @@ select {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+summary:focus-visible {
   box-shadow: var(--shadow-focus);
 }
 
@@ -48,7 +50,7 @@ input:disabled,
 textarea:disabled,
 select:disabled {
   cursor: not-allowed;
-  opacity: 0.58;
+  opacity: 0.6;
 }
 
 a {
@@ -58,7 +60,7 @@ a {
 code {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
-  background: var(--color-accent-soft);
+  background: var(--color-accent-faint);
   padding: 0.12rem 0.32rem;
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -67,7 +69,10 @@ code {
 h1,
 h2,
 h3,
-p {
+p,
+ul,
+ol,
+dl {
   margin-top: 0;
 }
 
@@ -79,7 +84,6 @@ h3 {
 
 h1 {
   margin-bottom: var(--space-4);
-  max-width: 12ch;
   font-size: var(--text-3xl);
   line-height: var(--line-tight);
 }
@@ -87,16 +91,18 @@ h1 {
 h2 {
   margin-bottom: var(--space-2);
   font-size: var(--text-xl);
-  line-height: 1.18;
+  line-height: 1.2;
 }
 
 h3 {
   margin-bottom: var(--space-2);
   font-size: var(--text-lg);
-  line-height: 1.24;
+  line-height: 1.28;
 }
 
-p {
+p,
+li,
+dd {
   color: var(--color-text-soft);
 }
 
@@ -104,9 +110,12 @@ small {
   color: var(--color-text-muted);
 }
 
+::selection {
+  background: rgba(47, 95, 168, 0.16);
+}
+
 @media (max-width: 767px) {
   h1 {
-    max-width: none;
     font-size: 2.45rem;
   }
 }

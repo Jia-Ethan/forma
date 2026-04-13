@@ -11,7 +11,7 @@ type AbstractEditorsProps = {
 export function AbstractEditors({ abstractCn, abstractEn, onChange }: AbstractEditorsProps) {
   return (
     <div className="editor-grid">
-      <SectionCard title="中文摘要" eyebrow="Abstract CN">
+      <SectionCard title="中文摘要" eyebrow="Abstract CN" tone="editor" description="检查摘要正文和关键词，避免导出后再回头修改。">
         <FieldGroup label="摘要" htmlFor="abstract-cn-content">
           <textarea
             id="abstract-cn-content"
@@ -29,7 +29,7 @@ export function AbstractEditors({ abstractCn, abstractEn, onChange }: AbstractEd
         </FieldGroup>
       </SectionCard>
 
-      <SectionCard title="Abstract" eyebrow="Abstract EN">
+      <SectionCard title="Abstract" eyebrow="Abstract EN" tone="editor" description="英文摘要建议与中文摘要的结构保持一致。">
         <FieldGroup label="Abstract" htmlFor="abstract-en-content">
           <textarea
             id="abstract-en-content"

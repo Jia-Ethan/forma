@@ -152,9 +152,18 @@ def render_appendix_tex(text: str) -> str:
 def validate_for_export(thesis: NormalizedThesis) -> None:
     metadata = thesis.metadata
     missing_fields: list[str] = []
+    required_metadata_fields = {
+        "title",
+        "author_name",
+        "student_id",
+        "department",
+        "major",
+        "advisor_name",
+        "submission_date",
+    }
 
     for field_name, value in metadata.model_dump().items():
-        if not value or not str(value).strip():
+        if field_name in required_metadata_fields and (not value or not str(value).strip()):
             missing_fields.append(field_name)
 
     if not thesis.abstract_cn.content.strip():
