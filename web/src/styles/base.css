@@ -2,131 +2,41 @@
   box-sizing: border-box;
 }
 
-html {
-  background: var(--color-page);
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  color: var(--color-text);
   background:
-    radial-gradient(circle at top left, rgba(47, 95, 168, 0.08), transparent 26rem),
-    linear-gradient(180deg, var(--color-page-soft) 0%, var(--color-page) 45%, var(--color-page-wash) 100%);
-  font-family: var(--font-sans);
-  line-height: var(--line-normal);
-  text-rendering: geometricPrecision;
+    radial-gradient(circle at top, rgba(163, 212, 255, 0.24), transparent 36%),
+    linear-gradient(180deg, #fbfdff 0%, var(--bg-page) 100%);
+  color: var(--text-primary);
 }
 
 button,
 input,
-textarea,
-select {
+textarea {
   font: inherit;
 }
 
 button {
-  letter-spacing: 0;
+  cursor: pointer;
 }
 
-button,
-input,
-textarea,
-select {
-  outline: none;
-}
-
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-summary:focus-visible {
-  box-shadow: var(--shadow-focus);
-}
-
-button:disabled,
-input:disabled,
-textarea:disabled,
-select:disabled {
+button:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
 }
 
-a {
-  color: var(--color-accent);
-}
-
-code {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  background: var(--color-accent-faint);
-  padding: 0.12rem 0.32rem;
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-}
-
-h1,
-h2,
-h3,
-p,
-ul,
-ol,
-dl {
-  margin-top: 0;
-}
-
-h1,
-h2,
-h3 {
-  letter-spacing: 0;
-}
-
-h1 {
-  margin-bottom: var(--space-4);
-  font-size: var(--text-3xl);
-  line-height: var(--line-tight);
-}
-
-h2 {
-  margin-bottom: var(--space-2);
-  font-size: var(--text-xl);
-  line-height: 1.2;
-}
-
-h3 {
-  margin-bottom: var(--space-2);
-  font-size: var(--text-lg);
-  line-height: 1.28;
+textarea {
+  resize: none;
 }
 
 p,
-li,
-dd {
-  color: var(--color-text-soft);
-}
-
-small {
-  color: var(--color-text-muted);
-}
-
-::selection {
-  background: rgba(47, 95, 168, 0.16);
-}
-
-@media (max-width: 767px) {
-  h1 {
-    font-size: 2.45rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 1ms !important;
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-  }
+h1,
+h2,
+h3 {
+  margin: 0;
 }

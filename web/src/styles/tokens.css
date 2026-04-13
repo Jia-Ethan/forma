@@ -1,90 +1,58 @@
 :root {
   color-scheme: light;
-
-  --color-page: #eef2f6;
-  --color-page-soft: #f7f9fc;
-  --color-page-wash: #e6edf4;
-
-  --surface-subtle: rgba(248, 250, 253, 0.9);
-  --surface-panel: rgba(255, 255, 255, 0.92);
-  --surface-panel-strong: #ffffff;
-  --surface-panel-accent: #f4f7fc;
-  --surface-panel-overlay: rgba(248, 250, 253, 0.97);
-  --surface-panel-critical: #fbfcfe;
-  --surface-debug: #18212c;
-
-  --color-text: #16202b;
-  --color-text-soft: #3f4d5f;
-  --color-text-muted: #6a788b;
-  --color-text-faint: #8a96a6;
-  --color-debug-text: #edf1f6;
-
-  --color-border: #d6dee8;
-  --color-border-strong: #bfcbdb;
-  --color-border-accent: #a4b8d6;
-
-  --color-accent: #2f5fa8;
-  --color-accent-strong: #244b84;
-  --color-accent-soft: #eaf1fb;
-  --color-accent-faint: #f5f8fd;
-
-  --color-success: #276848;
-  --color-success-soft: #edf7f0;
-  --color-success-border: #bfd9c8;
-
-  --color-warning: #8a641a;
-  --color-warning-soft: #fdf7ea;
-  --color-warning-border: #ebd7aa;
-
-  --color-danger: #ab3b47;
-  --color-danger-soft: #fff1f3;
-  --color-danger-border: #edc5cb;
-
-  --color-focus: rgba(47, 95, 168, 0.22);
-
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 8px;
-
-  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-sm: 0 10px 28px rgba(17, 24, 39, 0.06);
-  --shadow-md: 0 20px 48px rgba(17, 24, 39, 0.08);
-  --shadow-focus: 0 0 0 4px var(--color-focus);
-
+  font-family:
+    "SF Pro Display",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  --bg-page: #f6f9fc;
+  --bg-panel: rgba(255, 255, 255, 0.92);
+  --bg-panel-strong: #ffffff;
+  --bg-panel-soft: #f2f7fd;
+  --bg-panel-overlay: rgba(247, 251, 255, 0.96);
+  --bg-blocking: #fff1f1;
+  --bg-warning: #fff8ec;
+  --bg-ok: #f5fbff;
+  --border-base: rgba(116, 140, 168, 0.22);
+  --border-strong: rgba(102, 138, 180, 0.36);
+  --border-accent: rgba(109, 177, 255, 0.55);
+  --text-primary: #132033;
+  --text-secondary: #4d5f78;
+  --text-tertiary: #7d8ca1;
+  --text-danger: #a5484d;
+  --text-warning: #8a6200;
+  --text-info: #336da8;
+  --accent: #7ec3ff;
+  --accent-strong: #4598eb;
+  --accent-deep: #2f74bf;
+  --danger: #e78b8f;
+  --warning: #f0c36b;
+  --success: #89d2bf;
+  --shadow-soft: 0 18px 48px rgba(161, 186, 214, 0.2);
+  --shadow-panel: 0 24px 60px rgba(180, 201, 226, 0.18);
+  --shadow-modal: 0 32px 80px rgba(106, 135, 168, 0.25);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.25rem;
   --space-6: 1.5rem;
-  --space-7: 2rem;
-  --space-8: 2.5rem;
-  --space-9: 3rem;
-  --space-10: 4rem;
-
-  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --font-mono: "SFMono-Regular", "SF Mono", Consolas, monospace;
-
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-md: 1rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.375rem;
-  --text-2xl: 2.125rem;
-  --text-3xl: 3rem;
-
-  --line-tight: 1.12;
-  --line-normal: 1.55;
-  --line-relaxed: 1.7;
-
-  --motion-fast: 120ms;
-  --motion-base: 180ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-
-  --page-max: 1440px;
-  --sidebar-width: 368px;
-
-  --z-toast: 50;
-  --z-overlay: 40;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --motion-fast: 160ms;
+  --motion-base: 260ms;
+  --motion-slow: 420ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
 }

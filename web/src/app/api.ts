@@ -1,4 +1,4 @@
-import type { HealthResponse, NormalizedThesis } from "../generated/contracts";
+import type { HealthResponse, NormalizedThesis, PrecheckResponse } from "../generated/contracts";
 
 export type ApiErrorPayload = {
   error_code?: string;
@@ -61,25 +61,25 @@ export function getHealth() {
   return jsonRequest<HealthResponse>("/api/health");
 }
 
-export function parseDocx(file: File) {
+export function precheckDocx(file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return jsonRequest<NormalizedThesis>("/api/parse/docx", {
+  return jsonRequest<PrecheckResponse>("/api/precheck/docx", {
     method: "POST",
     body: formData,
   });
 }
 
-export function normalizeText(text: string) {
-  return jsonRequest<NormalizedThesis>("/api/normalize/text", {
+export function precheckText(text: string) {
+  return jsonRequest<PrecheckResponse>("/api/precheck/text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
 }
 
-export function exportThesis(kind: "tex" | "pdf", thesis: NormalizedThesis) {
-  return blobRequest(kind === "tex" ? "/api/export/texzip" : "/api/export/pdf", {
+export function exportDocx(thesis: NormalizedThesis) {
+  return blobRequest("/api/export/docx", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(thesis),

@@ -9,9 +9,8 @@ export interface BodySection {
 }
 
 export interface CapabilityFlags {
-  tex_zip: boolean;
-  pdf: boolean;
-  pdf_reason: string | null;
+  docx_export: boolean;
+  profile: string;
 }
 
 export interface MetadataFields {
@@ -34,16 +33,6 @@ export interface SummarySection {
   keywords: string[];
 }
 
-export interface ServiceLimits {
-  max_docx_size_bytes: number;
-}
-
-export interface TeXDependencyStatus {
-  xelatex: boolean;
-  kpsewhich: boolean;
-  missing_styles: string[];
-}
-
 export interface NormalizedThesis {
   source_type: string;
   metadata: MetadataFields;
@@ -58,15 +47,51 @@ export interface NormalizedThesis {
   capabilities: CapabilityFlags;
 }
 
+export interface PrecheckIssue {
+  id: string;
+  code: string;
+  severity: string;
+  block: string;
+  title: string;
+  message: string;
+}
+
+export interface PrecheckSummary {
+  can_confirm: boolean;
+  blocking_count: number;
+  warning_count: number;
+  info_count: number;
+  blocking_message: string;
+  warning_message: string;
+}
+
+export interface PreviewBlock {
+  key: string;
+  label: string;
+  status: string;
+  preview: string;
+  issue_ids: string[];
+}
+
+export interface ServiceLimits {
+  max_docx_size_bytes: number;
+}
+
+export interface PrecheckResponse {
+  thesis: NormalizedThesis;
+  summary: PrecheckSummary;
+  issues: PrecheckIssue[];
+  preview_blocks: PreviewBlock[];
+}
+
 export interface HealthResponse {
   ok: boolean;
   app_env: string;
   template: string;
   capabilities: CapabilityFlags;
   limits: ServiceLimits;
-  tex: TeXDependencyStatus;
 }
 
-export interface TextNormalizeRequest {
+export interface TextPrecheckRequest {
   text: string;
 }

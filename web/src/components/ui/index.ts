@@ -5,4 +5,3 @@ export { InfoNotice } from "./InfoNotice";
 export { SectionCard } from "./SectionCard";
 export { SegmentedControl } from "./SegmentedControl";
 export { StatusBadge } from "./StatusBadge";
-export { Toast } from "./Toast";
