@@ -9,11 +9,14 @@ from backend.app.contracts import (
     HealthResponse,
     MetadataFields,
     NormalizedThesis,
+    PrecheckIssue,
+    PrecheckResponse,
+    PrecheckSummary,
+    PreviewBlock,
     ReferenceSection,
     ServiceLimits,
     SummarySection,
-    TeXDependencyStatus,
-    TextNormalizeRequest,
+    TextPrecheckRequest,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,10 +28,13 @@ MODELS = [
     ReferenceSection,
     CapabilityFlags,
     NormalizedThesis,
-    TeXDependencyStatus,
+    PrecheckIssue,
+    PreviewBlock,
+    PrecheckSummary,
+    PrecheckResponse,
     ServiceLimits,
     HealthResponse,
-    TextNormalizeRequest,
+    TextPrecheckRequest,
 ]
 
 

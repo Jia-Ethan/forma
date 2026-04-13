@@ -1,240 +1,24 @@
 from __future__ import annotations
 
 import io
-import shutil
-import tempfile
 from datetime import datetime
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
 
-from ..config import DEBUG_OUTPUTS_DIR, DEBUG_PERSIST_ARTIFACTS, TEMPLATE_NAME, WORKING_TEMPLATE_DIR
+from docx import Document
+from docx.enum.section import WD_SECTION
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt
+
+from ..config import DEBUG_OUTPUTS_DIR, DEBUG_PERSIST_ARTIFACTS, TEMPLATE_DOCX_PATH, TEMPLATE_NAME
 from ..contracts import BodySection, NormalizedThesis
 from ..errors import AppError
-
-
-def latex_escape(text: str) -> str:
-    replacements = {
-        "\\": r"\textbackslash{}",
-        "&": r"\&",
-        "%": r"\%",
-        "$": r"\$",
-        "#": r"\#",
-        "_": r"\_",
-        "{": r"\{",
-        "}": r"\}",
-        "~": r"\textasciitilde{}",
-        "^": r"\textasciicircum{}",
-    }
-    escaped = "".join(replacements.get(ch, ch) for ch in text)
-    return escaped.replace("\t", "    ")
+from .precheck import run_precheck
 
 
 def normalize_text_block(text: str) -> str:
-    return "\n".join(line.rstrip() for line in text.strip().splitlines()).strip()
-
-
-def render_paragraphs_as_latex(text: str) -> str:
-    paragraphs = [chunk.strip() for chunk in normalize_text_block(text).split("\n\n") if chunk.strip()]
-    return "\n\n".join(latex_escape(paragraph) for paragraph in paragraphs)
-
-
-def render_body_sections(body_sections: list[BodySection]) -> str:
-    if not body_sections:
-        raise AppError("CONTENT_EMPTY", "正文内容为空，无法导出。", status_code=400)
-
-    commands = {1: "section", 2: "subsection", 3: "subsubsection"}
-    parts: list[str] = []
-    for section in body_sections:
-        level = min(max(section.level, 1), 3)
-        title = latex_escape(section.title.strip() or "正文")
-        parts.append(f"\\{commands[level]}{{{title}}}")
-        if section.content.strip():
-            parts.append(render_paragraphs_as_latex(section.content))
-    return "\n\n".join(parts).strip() + "\n"
-
-
-def render_cover_tex(thesis: NormalizedThesis) -> str:
-    metadata = thesis.metadata
-    header_title = latex_escape((metadata.title or "论文题目")[:40])
-    title = latex_escape(metadata.title or "待补充论文题目")
-    return f"""\\renewcommand{{\\thesistitlefancyhead}}{{{header_title}}}
-\\thispagestyle{{empty}}
-
-\\begin{{figure}}[ht]
-  \\centering
-  \\includegraphics[width=\\linewidth]{{./cover/scnu.jpg}}
-\\end{{figure}}
-
-\\begin{{center}}
-\\zihao{{0}}
-\\textbf{{本科毕业论文}}
-\\end{{center}}
-
-\\begin{{center}}
-\\zihao{{1}}
-\\ \\\\\\ \\\\\\ \\\\
-\\end{{center}}
-
-\\begin{{spacing}}{{1.8}}
-
-\\begin{{table}}[ht]
-  \\zihao{{-3}}
-  \\centering
-  \\begin{{tabular}}{{lc}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{论文题目:\\ }} }} & \\textbf{{{title}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{指导老师:\\ }} }} & \\textbf{{{latex_escape(metadata.advisor_name)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{学生姓名:}}}}  & \\textbf{{{latex_escape(metadata.author_name)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{学\\hspace{{\\fill}}号:}}}}  & \\textbf{{{latex_escape(metadata.student_id)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{学\\hspace{{\\fill}}院:}}}}  & \\textbf{{{latex_escape(metadata.department)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{专\\hspace{{\\fill}}业:}}}}  & \\textbf{{{latex_escape(metadata.major)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{1}}{{c}}{{\\textbf{{班\\hspace{{\\fill}}级:}}}}  & \\textbf{{{latex_escape(metadata.class_name)}}} \\\\ \\cline{{2-2}}
-  \\multicolumn{{2}}{{c}}{{\\textbf{{{latex_escape(metadata.submission_date)}}}}}
-  \\end{{tabular}}
-\\end{{table}}
-
-\\end{{spacing}}
-\\afterpage{{\\blankpage}}
-\\newpage
-"""
-
-
-def render_abstract_tex(title: str, heading: str, content: str, keywords_label: str, keywords: list[str]) -> str:
-    rendered = render_paragraphs_as_latex(content)
-    keywords_line = ""
-    if keywords:
-        keywords_line = f"\n\\ \\\\\n\\textbf{{{keywords_label}: }}{latex_escape('；'.join(keywords))}\n"
-    return f"""\\setcounter{{page}}{{1}}
-\\pagenumbering{{Roman}}
-\\begin{{center}}
-  \\addcontentsline{{toc}}{{section}}{{{latex_escape(title)}}}
-  \\zihao{{-2}} \\bfseries {heading}
-\\end{{center}}
-
-  \\zihao{{-4}}
-{rendered}{keywords_line}
-\\newpage
-"""
-
-
-def render_reference_tex(items: list[str]) -> str:
-    if not items:
-        return "% no references provided\n"
-    lines = ["\\zihao{-4}", "\\begin{thebibliography}{99}"]
-    for index, item in enumerate(items, start=1):
-        lines.append(f"\\bibitem{{ref{index}}} {latex_escape(item)}")
-    lines.extend(["\\end{thebibliography}", "\\newpage"])
-    return "\n".join(lines) + "\n"
-
-
-def render_thanks_tex(text: str) -> str:
-    body = text.strip() or "本文暂未提供致谢内容。"
-    return f"""\\section*{{致谢}}
-\\addcontentsline{{toc}}{{section}}{{致谢}}
-\\zihao{{-4}}
-
-{render_paragraphs_as_latex(body)}
-
-\\newpage
-"""
-
-
-def render_appendix_tex(text: str) -> str:
-    if not text.strip():
-        return "% no appendix provided\n"
-    return f"""\\section*{{附录}}
-\\addcontentsline{{toc}}{{section}}{{附录}}
-\\zihao{{-4}}
-
-{render_paragraphs_as_latex(text)}
-"""
-
-
-def validate_for_export(thesis: NormalizedThesis) -> None:
-    metadata = thesis.metadata
-    missing_fields: list[str] = []
-    required_metadata_fields = {
-        "title",
-        "author_name",
-        "student_id",
-        "department",
-        "major",
-        "advisor_name",
-        "submission_date",
-    }
-
-    for field_name, value in metadata.model_dump().items():
-        if field_name in required_metadata_fields and (not value or not str(value).strip()):
-            missing_fields.append(field_name)
-
-    if not thesis.abstract_cn.content.strip():
-        if not missing_fields and thesis.abstract_en.content.strip() and thesis.body_sections:
-            raise AppError("ABSTRACT_CN_MISSING", "中文摘要为空，请先补全后再导出。", status_code=400)
-        missing_fields.append("abstract_cn.content")
-
-    if not thesis.abstract_en.content.strip():
-        if not missing_fields and thesis.abstract_cn.content.strip() and thesis.body_sections:
-            raise AppError("ABSTRACT_EN_MISSING", "英文 Abstract 为空，请先补全后再导出。", status_code=400)
-        missing_fields.append("abstract_en.content")
-
-    if not thesis.body_sections:
-        missing_fields.append("body_sections")
-
-    if missing_fields:
-        raise AppError(
-            "FIELD_MISSING",
-            "导出前仍有必填字段缺失，请先补全。",
-            details={"missing_fields": missing_fields},
-            status_code=400,
-        )
-
-
-def prepare_worktree(target_dir: Path) -> Path:
-    if not WORKING_TEMPLATE_DIR.exists():
-        raise AppError(
-            "TEMPLATE_DEPENDENCY_MISSING",
-            "工作模板不存在，无法生成导出结果。",
-            details={"template_dir": str(WORKING_TEMPLATE_DIR)},
-            status_code=500,
-        )
-
-    work_dir = target_dir / TEMPLATE_NAME
-    shutil.copytree(WORKING_TEMPLATE_DIR, work_dir)
-    return work_dir
-
-
-def safe_relative_path(file_path: Path, root: Path) -> Path:
-    try:
-        return file_path.resolve().relative_to(root.resolve())
-    except ValueError as exc:
-        raise AppError("EXPORT_FAILED", "导出 tex 工程失败：发现不安全的模板路径。", status_code=500) from exc
-
-
-def write_generated_files(work_dir: Path, thesis: NormalizedThesis) -> None:
-    (work_dir / "cover" / "image.tex").write_text(render_cover_tex(thesis), encoding="utf-8")
-    (work_dir / "abstract" / "abstract-zh-CN.tex").write_text(
-        render_abstract_tex("摘要", "摘\\quad 要", thesis.abstract_cn.content, "关键词", thesis.abstract_cn.keywords),
-        encoding="utf-8",
-    )
-    (work_dir / "abstract" / "abstract-en.tex").write_text(
-        render_abstract_tex("Abstract", "Abstract", thesis.abstract_en.content, "Keywords", thesis.abstract_en.keywords),
-        encoding="utf-8",
-    )
-    (work_dir / "body" / "generated-body.tex").write_text(render_body_sections(thesis.body_sections), encoding="utf-8")
-    (work_dir / "body" / "index.tex").write_text("\\input{body/generated-body}\n", encoding="utf-8")
-    (work_dir / "reference" / "index.tex").write_text(render_reference_tex(thesis.references.items), encoding="utf-8")
-    (work_dir / "thanks" / "index.tex").write_text(render_thanks_tex(thesis.acknowledgements), encoding="utf-8")
-    (work_dir / "appendix" / "index.tex").write_text(render_appendix_tex(thesis.appendix), encoding="utf-8")
-
-
-def zip_worktree_bytes(work_dir: Path) -> bytes:
-    buffer = io.BytesIO()
-    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as zf:
-        for file_path in sorted(work_dir.rglob("*")):
-            if file_path.is_symlink():
-                continue
-            if file_path.is_file():
-                zf.write(file_path, safe_relative_path(file_path, work_dir))
-    return buffer.getvalue()
+    return "\n".join(line.rstrip() for line in (text or "").strip().splitlines()).strip()
 
 
 def persist_debug_copy(label: str, payload: bytes, suffix: str) -> None:
@@ -246,16 +30,237 @@ def persist_debug_copy(label: str, payload: bytes, suffix: str) -> None:
     target.write_bytes(payload)
 
 
-def export_texzip(thesis: NormalizedThesis) -> bytes:
-    validate_for_export(thesis)
+def clear_document(document: Document) -> None:
+    body = document._element.body
+    for child in list(body):
+        if child.tag.endswith("sectPr"):
+            continue
+        body.remove(child)
+
+
+def set_style_font(style, name: str, size: int, *, bold: bool = False) -> None:
+    style.font.name = name
+    style.font.size = Pt(size)
+    style.font.bold = bold
+    rpr = style._element.get_or_add_rPr()
+    rfonts = rpr.rFonts
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    rfonts.set(qn("w:ascii"), name)
+    rfonts.set(qn("w:hAnsi"), name)
+    rfonts.set(qn("w:eastAsia"), name)
+
+
+def set_run_font(run, name: str, size: int, *, bold: bool = False) -> None:
+    run.font.name = name
+    run.font.size = Pt(size)
+    run.bold = bold
+    rpr = run._element.get_or_add_rPr()
+    rfonts = rpr.rFonts
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    rfonts.set(qn("w:ascii"), name)
+    rfonts.set(qn("w:hAnsi"), name)
+    rfonts.set(qn("w:eastAsia"), name)
+
+
+def configure_document(document: Document) -> None:
+    section = document.sections[0]
+    section.top_margin = Cm(2.8)
+    section.bottom_margin = Cm(2.6)
+    section.left_margin = Cm(3.0)
+    section.right_margin = Cm(2.6)
+    section.page_width = Cm(21)
+    section.page_height = Cm(29.7)
+
+    styles = document.styles
+    set_style_font(styles["Normal"], "宋体", 12)
+    set_style_font(styles["Title"], "黑体", 18, bold=True)
+    set_style_font(styles["Heading 1"], "黑体", 16, bold=True)
+    set_style_font(styles["Heading 2"], "黑体", 14, bold=True)
+    set_style_font(styles["Heading 3"], "黑体", 13, bold=True)
+
+    normal = styles["Normal"].paragraph_format
+    normal.line_spacing = 1.5
+    normal.first_line_indent = Cm(0.74)
+    normal.space_after = Pt(0)
+
+
+def add_centered_paragraph(document: Document, text: str, *, style: str | None = None, size: int | None = None) -> None:
+    paragraph = document.add_paragraph(style=style)
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(text)
+    if size:
+        set_run_font(run, "黑体", size, bold=style == "Title")
+
+
+def add_page_break(document: Document) -> None:
+    document.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+
+
+def add_cover_page(document: Document, thesis: NormalizedThesis) -> None:
+    meta = thesis.metadata
+    add_centered_paragraph(document, "华南师范大学", style="Title")
+    add_centered_paragraph(document, "本科毕业论文", size=18)
+    document.add_paragraph()
+    add_centered_paragraph(document, meta.title.strip() or "待补充论文题目", size=20)
+    document.add_paragraph()
+
+    table = document.add_table(rows=7, cols=2)
+    table.style = "Table Grid"
+    rows = [
+        ("学生姓名", meta.author_name or "未填写"),
+        ("学号", meta.student_id or "未填写"),
+        ("学院", meta.department or "未填写"),
+        ("专业", meta.major or "未填写"),
+        ("班级", meta.class_name or "未填写"),
+        ("指导老师", meta.advisor_name or "未填写"),
+        ("提交日期", meta.submission_date or "未填写"),
+    ]
+    for row, values in zip(table.rows, rows):
+        row.cells[0].text = values[0]
+        row.cells[1].text = values[1]
+
+    add_page_break(document)
+
+
+def add_toc(document: Document) -> None:
+    heading = document.add_paragraph(style="Heading 1")
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    heading.add_run("目录")
+
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run()
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = 'TOC \\o "1-3" \\h \\z \\u'
+    fld_separate = OxmlElement("w:fldChar")
+    fld_separate.set(qn("w:fldCharType"), "separate")
+    placeholder = OxmlElement("w:t")
+    placeholder.text = "请在 Word 中右键更新目录。"
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+    run._r.extend([fld_begin, instr_text, fld_separate, placeholder, fld_end])
+    add_page_break(document)
+
+
+def add_heading(document: Document, text: str, level: int = 1, *, center: bool = False) -> None:
+    paragraph = document.add_paragraph(style=f"Heading {min(max(level, 1), 3)}")
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.LEFT
+    paragraph.add_run(text)
+
+
+def add_paragraphs(document: Document, text: str) -> None:
+    normalized = normalize_text_block(text)
+    if not normalized:
+        return
+    for chunk in [item.strip() for item in normalized.split("\n\n") if item.strip()]:
+        document.add_paragraph(chunk)
+
+
+def add_summary_section(document: Document, heading: str, content: str, keywords_label: str, keywords: list[str]) -> None:
+    add_heading(document, heading, 1, center=True)
+    add_paragraphs(document, content)
+    if keywords:
+        paragraph = document.add_paragraph()
+        paragraph.paragraph_format.first_line_indent = Cm(0)
+        paragraph.add_run(f"{keywords_label}：").bold = True
+        paragraph.add_run("；".join(keywords))
+    add_page_break(document)
+
+
+def add_body_section(document: Document, section: BodySection) -> None:
+    add_heading(document, section.title.strip() or "正文", section.level)
+    add_paragraphs(document, section.content)
+
+
+def add_references(document: Document, items: list[str]) -> None:
+    add_heading(document, "参考文献", 1)
+    for index, item in enumerate(items, start=1):
+        paragraph = document.add_paragraph()
+        paragraph.paragraph_format.first_line_indent = Cm(0)
+        paragraph.add_run(f"[{index}] {item}")
+
+
+def add_simple_section(document: Document, heading: str, text: str) -> None:
+    if not normalize_text_block(text):
+        return
+    add_page_break(document)
+    add_heading(document, heading, 1)
+    add_paragraphs(document, text)
+
+
+def load_template_document() -> Document:
+    if not TEMPLATE_DOCX_PATH.exists():
+        raise AppError(
+            "TEMPLATE_DEPENDENCY_MISSING",
+            "Word 模板不存在，无法生成导出结果。",
+            details={"template": str(TEMPLATE_DOCX_PATH)},
+            status_code=500,
+        )
     try:
-        with tempfile.TemporaryDirectory(prefix="scnu-texzip-") as tmp:
-            work_dir = prepare_worktree(Path(tmp))
-            write_generated_files(work_dir, thesis)
-            payload = zip_worktree_bytes(work_dir)
-            persist_debug_copy("tex-project", payload, "zip")
-            return payload
+        document = Document(TEMPLATE_DOCX_PATH)
+    except Exception as exc:  # pragma: no cover
+        raise AppError(
+            "TEMPLATE_DEPENDENCY_MISSING",
+            "Word 模板无法加载，请检查模板文件是否损坏。",
+            details={"template": str(TEMPLATE_DOCX_PATH), "reason": str(exc)},
+            status_code=500,
+        ) from exc
+
+    clear_document(document)
+    configure_document(document)
+    return document
+
+
+def validate_for_export(thesis: NormalizedThesis) -> None:
+    precheck = run_precheck(thesis)
+    if precheck.summary.blocking_count > 0:
+        raise AppError(
+            "FIELD_MISSING",
+            "预检仍存在阻塞项，无法导出 Word 文件。",
+            details={
+                "blocking_count": precheck.summary.blocking_count,
+                "issues": [issue.model_dump() for issue in precheck.issues if issue.severity == "blocking"],
+            },
+            status_code=400,
+        )
+
+
+def export_docx(thesis: NormalizedThesis) -> bytes:
+    validate_for_export(thesis)
+
+    try:
+        document = load_template_document()
+        add_cover_page(document, thesis)
+        add_toc(document)
+        add_summary_section(document, "摘要", thesis.abstract_cn.content, "关键词", thesis.abstract_cn.keywords)
+
+        if normalize_text_block(thesis.abstract_en.content):
+            add_summary_section(document, "Abstract", thesis.abstract_en.content, "Keywords", thesis.abstract_en.keywords)
+
+        for index, section in enumerate(thesis.body_sections):
+            if index == 0:
+                add_heading(document, section.title.strip() or "正文", section.level)
+                add_paragraphs(document, section.content)
+            else:
+                add_body_section(document, section)
+
+        add_page_break(document)
+        add_references(document, thesis.references.items)
+        add_simple_section(document, "致谢", thesis.acknowledgements)
+        add_simple_section(document, "附录", thesis.appendix)
+
+        buffer = io.BytesIO()
+        document.save(buffer)
+        payload = buffer.getvalue()
+        persist_debug_copy("word-thesis", payload, "docx")
+        return payload
     except AppError:
         raise
     except Exception as exc:  # pragma: no cover
-        raise AppError("EXPORT_FAILED", "导出 tex 工程失败。", details={"reason": str(exc)}, status_code=500) from exc
+        raise AppError("EXPORT_FAILED", "导出 Word 文件失败，请稍后重试。", details={"reason": str(exc)}, status_code=500) from exc

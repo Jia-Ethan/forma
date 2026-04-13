@@ -84,6 +84,38 @@ def build_capabilities(capabilities: CapabilityFlags) -> CapabilityFlags:
     return capabilities.model_copy(deep=True)
 
 
+def normalize_body_text(text: str) -> str:
+    return re.sub(r"\s+", "", text or "")
+
+
+def looks_like_title(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return False
+    if len(text) > 40:
+        return False
+    normalized = normalize_title(text)
+    if normalized in SPECIAL_TITLE_MAP or normalized in {"正文", "无标题", "引言", "绪论", "前言", "结论"}:
+        return False
+    if re.match(r"^(第[一二三四五六七八九十百0-9]+章|chapter\s+\d+)", text, flags=re.IGNORECASE):
+        return False
+    return True
+
+
+def extract_title(front_matter: list[str], sections: list[SectionDraft]) -> str:
+    for candidate in front_matter[:3]:
+        if looks_like_title(candidate):
+            return candidate.strip()
+
+    for section in sections:
+        if section.kind == "body" and looks_like_title(section.title):
+            body_text = normalize_body_text(section.content)
+            if len(body_text) > 120:
+                return section.title.strip()
+
+    return ""
+
+
 def parse_docx_file(path: Path, capabilities: CapabilityFlags) -> NormalizedThesis:
     if path.suffix.lower() != ".docx":
         raise AppError("UNSUPPORTED_FILE_TYPE", "仅支持上传 .docx 文件", status_code=400)
@@ -175,6 +207,7 @@ def normalized_from_paragraphs(
     if not sections:
         raise AppError("CONTENT_EMPTY", "文档中没有可用文本内容", status_code=400)
 
+    title = extract_title(front_matter, sections)
     body_sections: list[BodySection] = []
     abstract_cn = ""
     abstract_cn_keywords: list[str] = []
@@ -214,7 +247,7 @@ def normalized_from_paragraphs(
 
     return NormalizedThesis(
         source_type="docx" if source_type == "docx" else "text",
-        metadata=MetadataFields(),
+        metadata=MetadataFields(title=title),
         abstract_cn=SummarySection(content=abstract_cn, keywords=abstract_cn_keywords),
         abstract_en=SummarySection(content=abstract_en, keywords=abstract_en_keywords),
         body_sections=body_sections,

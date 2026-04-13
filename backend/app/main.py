@@ -13,20 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import (
-    ALLOWED_DOCX_CONTENT_TYPES,
-    ALLOWED_DOCX_EXTENSIONS,
-    APP_ENV,
-    CORS_ALLOWED_ORIGINS,
-    ENABLE_PDF_EXPORT,
-    MAX_UPLOAD_SIZE_BYTES,
-    TEMPLATE_NAME,
-)
-from .contracts import CapabilityFlags, HealthResponse, NormalizedThesis, ServiceLimits, TextNormalizeRequest
+from .config import ALLOWED_DOCX_CONTENT_TYPES, ALLOWED_DOCX_EXTENSIONS, APP_ENV, CORS_ALLOWED_ORIGINS, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME
+from .contracts import CapabilityFlags, HealthResponse, NormalizedThesis, PrecheckResponse, ServiceLimits, TextPrecheckRequest
 from .errors import AppError
-from .services.export import export_texzip
+from .services.export import export_docx
 from .services.parse import normalize_text_input, parse_docx_file
-from .services.pdf import check_tex_environment, export_pdf
+from .services.precheck import run_precheck
 
 try:
     from .frontend_bundle import ASSETS as BUNDLED_ASSETS
@@ -88,12 +80,7 @@ async def handle_validation_error(_request, exc: RequestValidationError):
 
 
 def capability_flags() -> CapabilityFlags:
-    tex_status = check_tex_environment()
-    if ENABLE_PDF_EXPORT and tex_status.xelatex and tex_status.kpsewhich and not tex_status.missing_styles:
-        return CapabilityFlags(tex_zip=True, pdf=True, pdf_reason=None)
-    if ENABLE_PDF_EXPORT:
-        return CapabilityFlags(tex_zip=True, pdf=False, pdf_reason="本地 TeX 依赖缺失，暂不可导出 PDF。")
-    return CapabilityFlags(tex_zip=True, pdf=False, pdf_reason="生产环境默认关闭 PDF，请导出 tex 工程 zip。")
+    return CapabilityFlags(docx_export=True, profile="undergraduate")
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -103,12 +90,11 @@ def health() -> HealthResponse:
         template=TEMPLATE_NAME,
         capabilities=capability_flags(),
         limits=ServiceLimits(max_docx_size_bytes=MAX_UPLOAD_SIZE_BYTES),
-        tex=check_tex_environment(),
     )
 
 
-@app.post("/api/parse/docx", response_model=NormalizedThesis)
-async def parse_docx(file: UploadFile = File(...)) -> NormalizedThesis:
+@app.post("/api/precheck/docx", response_model=PrecheckResponse)
+async def precheck_docx(file: UploadFile = File(...)) -> PrecheckResponse:
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_DOCX_EXTENSIONS:
         raise AppError("UNSUPPORTED_FILE_TYPE", "请上传 .docx 文件，暂不支持 .doc 或其他格式。", status_code=400)
@@ -126,33 +112,25 @@ async def parse_docx(file: UploadFile = File(...)) -> NormalizedThesis:
     with tempfile.TemporaryDirectory(prefix="scnu-parse-docx-") as tmp:
         upload_path = Path(tmp) / "input.docx"
         upload_path.write_bytes(payload)
-        return parse_docx_file(upload_path, capability_flags())
+        thesis = parse_docx_file(upload_path, capability_flags())
+        return run_precheck(thesis)
 
 
-@app.post("/api/normalize/text", response_model=NormalizedThesis)
-def normalize_text(request: TextNormalizeRequest) -> NormalizedThesis:
+@app.post("/api/precheck/text", response_model=PrecheckResponse)
+def precheck_text(request: TextPrecheckRequest) -> PrecheckResponse:
     if not request.text.strip():
         raise AppError("CONTENT_EMPTY", "粘贴内容为空，请先输入论文正文或章节内容。", status_code=400)
-    return normalize_text_input(request.text, capability_flags())
+    thesis = normalize_text_input(request.text, capability_flags())
+    return run_precheck(thesis)
 
 
-@app.post("/api/export/texzip")
-def export_texzip_route(thesis: NormalizedThesis):
-    payload = export_texzip(thesis)
+@app.post("/api/export/docx")
+def export_docx_route(thesis: NormalizedThesis):
+    payload = export_docx(thesis)
     return StreamingResponse(
         io.BytesIO(payload),
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="scnu-thesis.zip"'},
-    )
-
-
-@app.post("/api/export/pdf")
-def export_pdf_route(thesis: NormalizedThesis):
-    payload = export_pdf(thesis)
-    return StreamingResponse(
-        io.BytesIO(payload),
-        media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="scnu-thesis.pdf"'},
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": 'attachment; filename="SC-TH-export.docx"'},
     )
 
 

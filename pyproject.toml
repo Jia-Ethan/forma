@@ -1,7 +1,7 @@
 [project]
 name = "scnu-thesis-portal"
 version = "0.2.0"
-description = "Web app for structured SCNU thesis normalization and export"
+description = "Minimal SCNU undergraduate thesis formatter with precheck and Word export"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1.0",
