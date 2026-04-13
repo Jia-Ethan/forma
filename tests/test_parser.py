@@ -4,8 +4,8 @@ from backend.app.contracts import CapabilityFlags
 from backend.app.services.parse import normalize_text_input, parse_docx_file
 from backend.app.services.precheck import run_precheck
 
-
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-thesis.docx"
+COMPLEX_FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "compliance" / "sample-docx-complex.docx"
 
 
 def capabilities():
@@ -22,12 +22,20 @@ def test_parse_docx_extracts_title_and_expected_sections():
     assert thesis.appendix
 
 
+def test_parse_docx_detects_complex_table_feature():
+    thesis = parse_docx_file(COMPLEX_FIXTURE, capabilities())
+    assert "tables" in thesis.source_features
+    precheck = run_precheck(thesis)
+    assert any(issue.code == "SOURCE_FEATURE_TABLES" for issue in precheck.issues)
+
+
 def test_text_normalize_adds_missing_abstract_warnings_and_blocks_precheck():
     thesis = normalize_text_input("# 引言\n\n正文内容。" * 60, capabilities())
     assert thesis.body_sections
     assert "未识别到中文摘要，可在下一步补充。" in thesis.warnings
-    assert "未识别到 Abstract，可在下一步补充。" in thesis.warnings
+    assert "未识别到外文摘要，可在下一步补充。" in thesis.warnings
 
     precheck = run_precheck(thesis)
     assert precheck.summary.blocking_count >= 2
     assert any(issue.code == "TITLE_MISSING" for issue in precheck.issues)
+    assert any(issue.code == "ABSTRACT_EN_MISSING" for issue in precheck.issues)

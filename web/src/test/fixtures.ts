@@ -36,12 +36,12 @@ export function sampleThesis(overrides: ThesisFixtureOverrides = {}): Normalized
     },
     abstract_cn: {
       content:
-        "本文展示结构化映射后的论文导出流程，并说明如何在极简入口下完成一次完整的本科论文结构预检、风险暴露与 Word 文档导出。系统优先保障题目、摘要、正文结构与参考文献的最小可交付性，再通过统一模板输出结果。",
+        "本文展示结构化映射后的论文导出流程，并说明如何在极简入口下完成一次完整的本科论文结构预检、风险暴露与 Word 文档导出。系统优先保障题目、摘要、正文结构与参考文献的最小可交付性，再通过统一模板输出结果。".repeat(2),
       keywords: ["论文模板", "结构化映射", "Word 导出"],
     },
     abstract_en: {
       content:
-        "This thesis demonstrates a minimal precheck flow that validates title, abstract, body structure, and references before exporting a formatted Word thesis document.",
+        "This thesis demonstrates a minimal precheck flow that validates title, abstract, body structure, and references before exporting a formatted Word thesis document. ".repeat(2),
       keywords: ["thesis", "word export", "precheck"],
     },
     body_sections: [
@@ -54,15 +54,17 @@ export function sampleThesis(overrides: ThesisFixtureOverrides = {}): Normalized
       },
       {
         id: "section-2",
-        level: 1,
+        level: 2,
         title: "实现路径",
         content:
           "实现层需要把解析结果映射为统一的论文结构对象，再由预检规则层输出阻塞项、警告项和信息项。前端只负责展示这些结果，并在确认后触发 Word 模板导出。这样既能缩短主路径，也能让错误前置暴露，避免黑盒直出带来的不确定性。",
       },
     ],
+    notes: "① 注释示例：当前版本仅提供基础注释章节输出，页末注需人工复核。",
     references: { items: ["【1】示例作者. 论文模板实践."] },
     acknowledgements: "感谢导师的指导。",
     appendix: "附录 A：补充说明。",
+    source_features: [],
     warnings: [],
     parse_errors: [],
     capabilities: healthPayload.capabilities,
@@ -87,9 +89,9 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
       can_confirm: true,
       blocking_count: 0,
       warning_count: 2,
-      info_count: 2,
-      blocking_message: "预检已通过，可以开始导出 Word 文件。",
-      warning_message: "另有 2 项警告不影响继续导出。",
+      info_count: 3,
+      blocking_message: "当前未发现阻塞项，可以继续导出正文审查稿。",
+      warning_message: "另有 2 项警告需要在导出后复核。",
     },
     issues: [
       {
@@ -97,8 +99,16 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
         code: "COVER_FIELDS_MISSING",
         severity: "warning",
         block: "metadata",
-        title: "封面字段待补充",
-        message: "以下字段仍未识别：班级。",
+        title: "封面字段未补全",
+        message: "系统不会自动生成学校正式封面；以下字段仍未识别：班级。",
+      },
+      {
+        id: "cover-info",
+        code: "OFFICIAL_COVER_EXTERNAL",
+        severity: "info",
+        block: "metadata",
+        title: "正式封面需另行套用",
+        message: "当前工具不生成学校统一正式封面，只导出正文审查稿。",
       },
       {
         id: "docx-export-profile",
@@ -106,7 +116,7 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
         severity: "info",
         block: "metadata",
         title: "导出配置",
-        message: "导出将按 SC-TH 本科论文 Word 模板生成。",
+        message: "导出将按 SC-TH 本科论文正文审查稿模板生成。",
       },
       {
         id: "body-section-count",
@@ -134,7 +144,7 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
       },
       {
         key: "abstract_en",
-        label: "英文摘要",
+        label: "外文摘要",
         status: "ok",
         preview: thesis.abstract_en.content.slice(0, 50),
         issue_ids: [],
@@ -143,7 +153,7 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
         key: "keywords",
         label: "关键词",
         status: "ok",
-        preview: thesis.abstract_cn.keywords.join("；"),
+        preview: thesis.abstract_cn.keywords.join("，"),
         issue_ids: [],
       },
       {
@@ -178,8 +188,8 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
         key: "metadata",
         label: "封面字段",
         status: "warning",
-        preview: "已识别 6/7 项：学生姓名、学号、学院、专业、指导老师、提交日期",
-        issue_ids: ["metadata-missing", "docx-export-profile"],
+        preview: "正式统一封面需另行套用；已识别 6/7 项字段",
+        issue_ids: ["metadata-missing", "cover-info", "docx-export-profile"],
       },
     ],
     ...overrides,
