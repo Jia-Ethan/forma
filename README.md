@@ -10,7 +10,7 @@
 - 当前主模板：`sc-th-word`
 - 当前线上主产物：`.docx`
 
-![SC-TH 极简首页](docs/assets/sc-th-home.png)
+![SC-TH 首页输入条](docs/assets/sc-th-home.png)
 
 ## 当前主路径
 
@@ -29,6 +29,8 @@ flowchart LR
 3. 弹出“预检确认弹窗”，把阻塞项、警告项、信息项一次性展示出来。
 4. 只有阻塞项清零后，才能确认并进入海浪式导出进度。
 5. 完成后自动下载 `.docx`，页面回到初始状态。
+
+首页当前只承担“开始输入”的职责，不再显示额外宣传标题。默认提示为 `按 Cmd/Ctrl + Enter 开始预检`，输入条保持单行空态，长文本会在有限高度内渐进扩展并切换为内部滚动。
 
 纯文本输入建议保留显式结构标记，例如：`摘要`、`Abstract`、`# 引言`、`# 参考文献`。结构越明确，预检结果越稳定。
 
@@ -120,10 +122,10 @@ PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 - `web/`：极简首页、预检弹窗、导出进度与下载流程
 - `backend/`：解析、预检规则、Word 导出与 API
 - `templates/working/sc-th-word/`：当前线上 `.docx` 导出模板
-- `templates/upstream/latex-scnu/`：本科论文版式参考材料
 - `docs/`：当前产品说明、部署、质量清单与验收记录
-- `docs/archive/legacy-latex-workspace/`：历史 LaTeX / workspace 方案归档
 - `tests/`：后端 API 与解析测试
+
+历史参考材料已降级归档到 `templates/upstream/latex-scnu/` 与 `docs/archive/legacy-latex-workspace/`，不属于当前产品主线目录。
 
 ## 质量状态
 
@@ -142,6 +144,7 @@ PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 - [部署说明](docs/deploy-vercel.md)
 - [本地验收清单](docs/local-validation-word.md)
 - [质量清单](docs/quality-checklist-v2.md)
+- [首页视觉收敛验收记录](docs/homepage-visual-refine-v1.md)
 
 ## Roadmap
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import type { FlowPhase } from "../../app/domain";
 import { WaveExportProgress } from "./WaveExportProgress";
 
@@ -15,13 +15,35 @@ type HomeComposerProps = {
 
 export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onTextChange, onFileSelect, onSubmit, onClear }: HomeComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const hasContent = Boolean(selectedFile || rawText.trim());
   const disabled = phase === "prechecking" || phase === "exporting";
 
   const placeholder = useMemo(() => {
     if (selectedFile) return selectedFile.name;
-    return "上传 .docx 或粘贴论文内容，然后开始预检";
+    return "上传 .docx 或粘贴论文内容";
   }, [selectedFile]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || selectedFile) return;
+
+    textarea.style.height = "0px";
+    const computed = window.getComputedStyle(textarea);
+    const fontSize = Number.parseFloat(computed.fontSize) || 16;
+    const rawLineHeight = Number.parseFloat(computed.lineHeight);
+    const lineHeight = computed.lineHeight.endsWith("px")
+      ? rawLineHeight || fontSize * 1.5
+      : rawLineHeight && rawLineHeight > 0 && rawLineHeight < 3
+        ? fontSize * rawLineHeight
+        : fontSize * 1.5;
+    const minHeight = Math.ceil(lineHeight);
+    const maxHeight = Math.ceil(lineHeight * 4 + 4);
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [rawText, selectedFile, phase]);
 
   return (
     <div className="composer-shell">
@@ -56,13 +78,12 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
         ) : selectedFile ? (
           <div className="composer-file-pill" aria-label="当前已选文件">
             <strong>{selectedFile.name}</strong>
-            <span>按回车或点击右侧按钮开始预检</span>
           </div>
         ) : (
           <textarea
+            ref={textareaRef}
             className="composer-textarea"
             aria-label="论文正文输入框"
-            rows={Math.min(Math.max(rawText.split("\n").length || 1, 1), 10)}
             placeholder={placeholder}
             value={rawText}
             disabled={disabled}
@@ -82,7 +103,7 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
       </div>
 
       <div className="composer-meta">
-        <p>{phase === "prechecking" ? "正在进行结构识别与规则检查…" : "文本模式下按 Cmd/Ctrl + Enter 开始预检。"}</p>
+        <p>{phase === "prechecking" ? "正在进行结构识别与规则检查…" : "按 Cmd/Ctrl + Enter 开始预检"}</p>
         {hasContent ? (
           <button type="button" className="composer-clear" onClick={onClear}>
             清空

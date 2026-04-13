@@ -22,8 +22,10 @@ describe("App smoke", () => {
 
     render(<App />);
 
-    expect(screen.getByText("SC-TH")).toBeInTheDocument();
-    expect(screen.getByText("极简论文预检与 Word 导出")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "SC-TH" })).toBeInTheDocument();
+    expect(screen.queryByText("极简论文预检与 Word 导出")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("上传 .docx 或粘贴论文内容")).toBeInTheDocument();
+    expect(screen.getByText("按 Cmd/Ctrl + Enter 开始预检")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传 .docx 文件" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始预检" })).toBeInTheDocument();
 
@@ -80,5 +82,33 @@ describe("App smoke", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "导出前结构预检" })).not.toBeInTheDocument());
     expect(screen.getByLabelText("论文正文输入框")).toHaveValue("我的论文标题\n\n摘要\n这是摘要。");
+  });
+
+  it("keeps the composer compact after multiline input by switching to internal scrolling", async () => {
+    mockFetch();
+
+    render(<App />);
+
+    const textarea = screen.getByLabelText("论文正文输入框") as HTMLTextAreaElement;
+    let mockScrollHeight = 160;
+    Object.defineProperty(textarea, "scrollHeight", {
+      configurable: true,
+      get: () => mockScrollHeight,
+    });
+
+    fireEvent.change(textarea, {
+      target: { value: "第一行\n第二行\n第三行\n第四行\n第五行\n第六行" },
+    });
+
+    await waitFor(() => expect(Number.parseFloat(textarea.style.height)).toBeGreaterThan(0));
+    expect(Number.parseFloat(textarea.style.height)).toBeLessThanOrEqual(101);
+    expect(textarea.style.overflowY).toBe("auto");
+
+    mockScrollHeight = 48;
+    fireEvent.change(textarea, {
+      target: { value: "第一行\n第二行" },
+    });
+
+    await waitFor(() => expect(textarea.style.overflowY).toBe("hidden"));
   });
 });

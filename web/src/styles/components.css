@@ -30,24 +30,34 @@
 
 .composer-plus,
 .composer-submit {
-  width: 3rem;
-  height: 3rem;
+  width: 2.375rem;
+  height: 2.375rem;
   display: inline-grid;
   place-items: center;
   border: 0;
   border-radius: 999px;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
 }
 
 .composer-plus {
-  background: var(--bg-panel-soft);
-  color: var(--text-primary);
-  font-size: 1.35rem;
+  background: rgba(226, 236, 247, 0.7);
+  color: var(--text-secondary);
+  font-size: 1.1rem;
 }
 
 .composer-submit {
+  background: rgba(126, 195, 255, 0.12);
+  color: rgba(48, 99, 154, 0.84);
+  font-size: 1rem;
+}
+
+.composer-plus:hover:not(:disabled),
+.composer-submit:hover:not(:disabled) {
   background: rgba(126, 195, 255, 0.18);
   color: var(--accent-deep);
-  font-size: 1.2rem;
 }
 
 .composer-file-input {
@@ -59,8 +69,12 @@
   outline: 0;
   background: transparent;
   color: var(--text-primary);
-  line-height: 1.65;
-  padding: 0.1rem 0;
+  line-height: 1.5;
+  font-size: var(--text-md);
+  padding: 0;
+  resize: none;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .composer-textarea::placeholder {
@@ -68,24 +82,30 @@
 }
 
 .composer-file-pill {
-  display: grid;
-  gap: var(--space-2);
+  display: flex;
+  align-items: center;
   align-content: center;
-  padding: 0.25rem 0;
+  min-width: 0;
+  padding: 0;
 }
 
 .composer-file-pill strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--text-md);
+  font-weight: 500;
 }
 
-.composer-file-pill span,
 .composer-meta p,
 .preview-ok,
 .precheck-summary p,
 .precheck-footer-copy p,
 .precheck-footer-copy small {
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
 .composer-clear {
@@ -93,6 +113,11 @@
   background: transparent;
   color: var(--text-tertiary);
   padding: 0;
+  font-size: var(--text-xs);
+}
+
+.composer-clear:hover {
+  color: var(--text-secondary);
 }
 
 .composer-clear-placeholder {
@@ -108,7 +133,7 @@
 .wave-progress-track {
   position: relative;
   overflow: hidden;
-  height: 2rem;
+  height: 1.4rem;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(233, 244, 255, 0.78), rgba(220, 238, 255, 0.82));
 }

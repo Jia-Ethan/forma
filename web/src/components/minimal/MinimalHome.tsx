@@ -18,8 +18,9 @@ export function MinimalHome(props: MinimalHomeProps) {
   return (
     <main className="minimal-page">
       <section className="minimal-hero" aria-labelledby="sc-th-title">
-        <p className="minimal-logo">SC-TH</p>
-        <h1 id="sc-th-title">极简论文预检与 Word 导出</h1>
+        <h1 id="sc-th-title" className="minimal-logo">
+          SC-TH
+        </h1>
         <HomeComposer
           rawText={props.rawText}
           selectedFile={props.selectedFile}

@@ -21,17 +21,8 @@ Thumbs.db
 
 # Local outputs
 outputs/*
-!outputs/.gitkeep
-!outputs/jobs/
-!outputs/jobs/.gitkeep
-outputs/jobs/**
-!outputs/jobs/.gitkeep
 tmp/*
-!tmp/.gitkeep
-!tmp/jobs/
-!tmp/jobs/.gitkeep
-tmp/jobs/**
-!tmp/jobs/.gitkeep
+archive/
 
 # Python
 __pycache__/
