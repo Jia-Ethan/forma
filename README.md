@@ -1,12 +1,12 @@
 # scnu-thesis-portal
 
-面向华南师范大学论文写作场景的轻量 web-app：把 `.docx` 或粘贴文本解析成可检查、可修正的论文结构，并导出规范化 `.tex` 工程 zip。
+面向华南师范大学论文写作场景的 academic web-app：把 `.docx` 或粘贴文本整理成可检查、可修正的论文结构，并导出规范化 `.tex` 工程 zip。
 
 > 当前不是学校官方认证工具，也不是万能论文格式修复器。它的目标是先把“内容结构化”和“进入 LaTeX 模板工程”这条主线跑稳。
 
 ## 在线预览
 
-- Vercel Preview: https://scnu-thesis-portal-git-feat-vercel-l-e3191b-jia-ethans-projects.vercel.app
+- Production: https://scnu-thesis-portal.vercel.app
 - 当前主线模板：`latex-scnu-web`
 - 当前线上主产物：`.tex` 工程 zip
 
@@ -16,28 +16,31 @@
 
 - 上传 `.docx` 文件并抽取文本与章节结构
 - 粘贴论文文本并识别摘要、Abstract、正文、参考文献、致谢、附录
-- 在网页内 review / 修正封面字段、摘要、关键词、章节和参考文献
+- 在网页内 review / 修正封面字段、摘要、关键词、章节、参考文献与收尾文本
+- 在工作台侧栏查看完成度、风险提示和导出阻塞项
 - 导出规范化 `.tex` 工程 zip，便于后续本地编译或人工调整
 - 生产环境默认关闭 PDF，并通过 `PDF_DISABLED` 给出明确说明
 
 ![解析与 review 页面](docs/assets/vercel-launch-review.png)
 
+![导出与风险侧栏](docs/assets/vercel-launch-export.png)
+
 ## 当前前端体验
 
-当前前端采用三段式工作流：
+当前前端仍然坚持三段式工作流，但交互结构已经从 MVP 页面升级成更稳定的产品工作台：
 
-1. 首屏只说明核心路径：上传论文内容、识别结构、校对字段、导出工程。
-2. 未解析前只显示输入区，可在 `.docx` 上传和粘贴正文之间切换。
-3. 解析完成后进入 review 工作台，集中展示字段修正、正文编辑、识别概览和导出面板。
+1. 首屏只做三件事：说明输入是什么、输出是什么、当前明确不做什么。
+2. Intake 区把 `.docx` 上传与粘贴正文区分成两种入口，并把输入状态、风险边界和主 CTA 收拢在同一块区域。
+3. 解析完成后进入论文结构化编辑台：左侧处理元信息、摘要、章节和参考文献，右侧集中展示完成度、风险提示和导出决策。
 
-界面风格以浅色背景、细描边、轻阴影、克制的蓝色强调和短动效为主。玻璃材质只用于首屏状态与轻量反馈，不影响论文编辑区的可读性。
+设计语言保持克制的蓝色强调、原生 CSS token、短动效和低噪音反馈。首页允许轻微产品感，进入 workspace 后则切到更稳的编辑器语气，把注意力留给论文结构本身。
 
 当前已补齐的前端工程能力：
 
-- 请求逻辑、论文编辑状态、导出流程和 UI 组件已拆分，不再由 `App.tsx` 单文件承担全部职责
-- 导出 `.tex` 工程 zip 前会在前端校验核心封面字段；缺少题目、姓名、学号、学院 / 系别、专业、导师或提交日期时，不会发起导出请求
-- 班级等非核心字段作为建议补全项提示，不阻塞导出
-- 前端测试覆盖字段校验、metadata 更新后的导出 payload、章节编辑、关键词 / 参考文献转换、解析异常和导出主路径
+- 请求逻辑、论文编辑状态、导出流程和 UI 组件继续按职责拆分，不再回退到单文件大组件
+- token、layout、components、features 四层样式重新梳理，首页与工作台已分成两种明确模式
+- 导出 `.tex` 工程 zip 前，前后端都按同一套必填字段校验；班级等补充项只作为建议，不阻塞导出
+- 前端测试覆盖 Hero / Intake 主路径、metadata 更新后的导出 payload、章节编辑、关键词 / 参考文献转换、解析异常和导出主路径
 
 ## 当前明确不支持
 
@@ -65,7 +68,7 @@ flowchart LR
 4. 在 review 区补全题目、姓名、学号、学院、导师、日期等封面字段。
 5. 点击“导出 `.tex` 工程 zip”。
 
-当前最稳定路径是：上传 / 粘贴 → 识别 → review → 导出 `.tex zip`。PDF 在生产环境默认关闭，不作为线上主路径。
+当前最稳定路径仍是：上传 / 粘贴 → 识别 → review → 导出 `.tex zip`。PDF 在生产环境默认关闭，不作为线上主路径。
 
 ## 本地运行
 
@@ -142,9 +145,9 @@ PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 
 当前最小护栏：
 
-- `uv run pytest tests -q`：16 passed
-- `npm run test --prefix web`：15 passed
-- `vercel build`：通过
+- `uv run pytest tests -q`：17 passed
+- `npm run test:smoke --prefix web`：16 passed
+- `npm run build --prefix web`：通过
 - 生产依赖 audit：0 vulnerabilities
 
 质量清单见 [docs/quality-checklist-v1.md](docs/quality-checklist-v1.md)。
@@ -152,8 +155,8 @@ PATH="$(dirname "$(uv python find 3.12)"):$PATH" vercel dev
 ## Roadmap
 
 - `v0.2`：线上可访问 MVP，支持解析、review / 修正、导出 `.tex` 工程 zip
-- `v0.3`：增强 `.docx` 结构识别，尤其是封面元信息、摘要、章节和参考文献边界
-- `v0.4`：补端到端测试、错误提示体验和更完整的示例材料
+- `v0.3`：完成 product-grade 前端工作台升级，统一状态反馈、导出决策区和 GitHub / README 展示
+- `v0.4`：增强 `.docx` 结构识别，尤其是封面元信息、摘要、章节和参考文献边界
 - `v0.5+`：评估是否拆分静态前端与 Python API，或引入更稳定的编译 / 存储方案
 
 ## 来源与说明
