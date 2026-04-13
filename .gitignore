@@ -39,3 +39,7 @@ web/dist/
 public/
 .vercel/
 .vercel
+
+# Local source copies retained outside docs/sources
+/华南师范大学本科生毕业论文（设计）手册.doc
+/华南师范大学本科毕业论文（设计）撰写基本规范.pdf
