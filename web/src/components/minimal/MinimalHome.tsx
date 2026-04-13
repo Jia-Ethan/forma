@@ -9,6 +9,7 @@ type MinimalHomeProps = {
   exportProgress: number;
   error: InlineErrorState | null;
   onTextChange: (value: string) => void;
+  onUploadTrigger: () => boolean;
   onFileSelect: (file: File | null) => void;
   onSubmit: () => void;
   onClear: () => void;
@@ -27,6 +28,7 @@ export function MinimalHome(props: MinimalHomeProps) {
           phase={props.phase}
           exportProgress={props.exportProgress}
           onTextChange={props.onTextChange}
+          onUploadTrigger={props.onUploadTrigger}
           onFileSelect={props.onFileSelect}
           onSubmit={props.onSubmit}
           onClear={props.onClear}
