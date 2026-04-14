@@ -61,7 +61,7 @@ export function issueCount(issues: PrecheckIssue[], severity: "blocking" | "warn
 }
 
 export function exportFilename(thesis: NormalizedThesis) {
-  const raw = thesis.metadata.title.trim() || "SC-TH-export";
+  const raw = thesis.cover.title.trim() || "SC-TH-export";
   const safe = raw.replace(/[\\/:*?"<>|]/g, "-").slice(0, 80);
   return `${safe || "SC-TH-export"}.docx`;
 }

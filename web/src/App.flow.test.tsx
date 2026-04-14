@@ -51,21 +51,21 @@ describe("App business flow", () => {
               blocking_count: 2,
               warning_count: 1,
               info_count: 2,
-              blocking_message: "当前仍有 2 项必须补足内容，暂时无法确认。",
-              warning_message: "另有 1 项警告不影响继续导出。",
+              blocking_message: "当前仍有 2 项阻塞问题，暂时无法导出。",
+              warning_message: "另有 1 项警告，其中缺失章节会按留白位保留，复杂元素需人工复核。",
             },
             issues: [
               {
-                id: "title-missing",
-                code: "TITLE_MISSING",
+                id: "body-missing",
+                code: "BODY_MISSING",
                 severity: "blocking",
-                block: "title",
-                title: "题目缺失",
-                message: "未识别到可用论文题目，请先在输入内容中补足题目。",
+                block: "body",
+                title: "正文主体不足",
+                message: "未识别到足够的正文内容，当前无法生成可用的论文主文。",
               },
             ],
             preview_blocks: samplePrecheck().preview_blocks.map((block) =>
-              block.key === "title" ? { ...block, status: "blocking", preview: "未识别到标题", issue_ids: ["title-missing"] } : block,
+              block.key === "body" ? { ...block, status: "blocking", preview: "正文内容不足", issue_ids: ["body-missing"] } : block,
             ),
           }),
         );
@@ -116,7 +116,7 @@ describe("App business flow", () => {
     expect(exportCall).toBeTruthy();
     const [, request] = exportCall as [RequestInfo | URL, RequestInit];
     const payload = JSON.parse(String(request.body));
-    expect(payload.metadata.title).toBe("结构化映射示例论文");
+    expect(payload.cover.title).toBe("结构化映射示例论文");
   });
 
   it("keeps upload disabled while precheck is in flight", async () => {

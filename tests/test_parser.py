@@ -1,76 +1,83 @@
 from pathlib import Path
 
 from backend.app.contracts import CapabilityFlags
-from backend.app.services.parse import detect_heading, normalize_text_input, normalized_from_paragraphs, parse_docx_file, split_keywords
+from backend.app.services.parse import normalize_text_input, parse_docx_file
 from backend.app.services.precheck import run_precheck
 
+
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-thesis.docx"
-COMPLEX_FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "compliance" / "sample-docx-complex.docx"
+MISSING_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "missing-sections.docx"
 
 
 def capabilities():
     return CapabilityFlags(docx_export=True, profile="undergraduate")
 
 
-def test_parse_docx_extracts_title_and_expected_sections():
+def test_parse_docx_extracts_cover_and_expected_sections():
     thesis = parse_docx_file(FIXTURE, capabilities())
-    assert thesis.metadata.title == "基于结构化映射的本科论文生成示例"
+
+    assert thesis.cover.title == "基于结构化映射的本科论文生成示例"
     assert thesis.abstract_cn.content
     assert thesis.abstract_en.content
-    assert thesis.references.items
+    assert thesis.references
+    assert thesis.appendices
     assert thesis.acknowledgements
-    assert thesis.appendix
+    assert thesis.body_sections[0].title == "引言"
 
 
-def test_parse_docx_detects_complex_table_feature():
-    thesis = parse_docx_file(COMPLEX_FIXTURE, capabilities())
-    assert "tables" in thesis.source_features
+def test_parse_docx_tracks_missing_sections_without_fabrication():
+    thesis = parse_docx_file(MISSING_FIXTURE, capabilities())
+
+    assert "appendices" in thesis.missing_sections
+    assert "acknowledgements" in thesis.missing_sections
+    assert "cover.advisor" in thesis.missing_sections
+    assert thesis.references[0].normalized_text == "示例作者. 规范化导出实践[J]."
+
     precheck = run_precheck(thesis)
-    assert any(issue.code == "SOURCE_FEATURE_TABLES" for issue in precheck.issues)
+    assert precheck.summary.can_confirm is True
+    assert any(issue.code == "APPENDICES_BLANK" for issue in precheck.issues)
+    assert any(issue.code == "ACKNOWLEDGEMENTS_BLANK" for issue in precheck.issues)
 
 
-def test_text_normalize_adds_missing_abstract_warnings_and_blocks_precheck():
-    thesis = normalize_text_input("# 引言\n\n正文内容。" * 60, capabilities())
+def test_text_normalize_keeps_missing_sections_as_warnings():
+    thesis = normalize_text_input("# 引言\n\n正文内容。" * 20, capabilities())
+
     assert thesis.body_sections
-    assert "未识别到中文摘要，可在下一步补充。" in thesis.warnings
-    assert "未识别到外文摘要，可在下一步补充。" in thesis.warnings
+    assert "abstract_cn" in thesis.missing_sections
+    assert "references" in thesis.missing_sections
+    assert "未识别到中文摘要，导出时会保留摘要章节留白。" in thesis.warnings
 
     precheck = run_precheck(thesis)
-    assert precheck.summary.blocking_count >= 2
-    assert any(issue.code == "TITLE_MISSING" for issue in precheck.issues)
-    assert any(issue.code == "ABSTRACT_EN_MISSING" for issue in precheck.issues)
+    assert precheck.summary.can_confirm is True
+    assert precheck.summary.blocking_count == 0
+    assert any(issue.code == "ABSTRACT_CN_BLANK" for issue in precheck.issues)
 
 
-def test_detect_heading_rejects_numbered_reference_entries_and_sentence_like_list_items():
-    assert detect_heading("1. 作者. 论文题目[J]. 期刊, 2024.", None) == (False, "", 0)
-    assert detect_heading("1. 本研究采用问卷法开展实证分析。", None) == (False, "", 0)
-    assert detect_heading("1.1 研究背景", None) == (True, "研究背景", 2)
-
-
-def test_normalized_paragraphs_keep_numbered_reference_entries_in_reference_section():
-    thesis = normalized_from_paragraphs(
-        [
-            ("基于结构化映射的本科论文生成示例", None),
-            ("1 绪论", None),
-            ("这是足够长的正文内容。 " * 40, None),
-            ("参考文献", None),
-            ("1. 作者. 论文题目[J]. 期刊, 2024.", None),
-            ("2. 第二条文献[M]. 出版社, 2023.", None),
-        ],
-        "text",
+def test_docx_and_text_inputs_can_converge_to_same_semantics():
+    docx_thesis = parse_docx_file(MISSING_FIXTURE, capabilities())
+    text_thesis = normalize_text_input(
+        "\n".join(
+            [
+                "论文题目：面向规范映射的本科论文导出基线",
+                "学生姓名：张三",
+                "学号：2020123456",
+                "学院：计算机学院",
+                "专业：网络工程",
+                "摘要",
+                "本文用于验证缺失章节时仍能保留结构留白，不自动补写不存在的内容。",
+                "关键词：导出规范，章节映射，留白策略",
+                "第一章 引言",
+                "这里是引言正文，用于验证正文仍可被识别并导出。",
+                "1.1 研究背景",
+                "这里是研究背景，用于验证多级标题目录联动。",
+                "参考文献",
+                "【1】示例作者. 规范化导出实践[J].",
+            ]
+        ),
         capabilities(),
-        source_features=[],
     )
 
-    assert thesis.references.items == [
-        "1. 作者. 论文题目[J]. 期刊, 2024.",
-        "2. 第二条文献[M]. 出版社, 2023.",
-    ]
-    assert [(section.level, section.title) for section in thesis.body_sections] == [(1, "绪论")]
-
-
-def test_split_keywords_supports_common_english_keyword_prefixes():
-    for raw in ["Keyword: alpha, beta", "Keywords: alpha, beta", "Key words: alpha, beta"]:
-        body, keywords = split_keywords(f"This is abstract.\n{raw}", english=True)
-        assert body == "This is abstract."
-        assert keywords == ["alpha", "beta"]
+    assert docx_thesis.cover.title == text_thesis.cover.title
+    assert [section.title for section in docx_thesis.body_sections] == [section.title for section in text_thesis.body_sections]
+    assert [item.normalized_text for item in docx_thesis.references] == [item.normalized_text for item in text_thesis.references]
+    assert docx_thesis.missing_sections == text_thesis.missing_sections

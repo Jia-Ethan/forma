@@ -20,6 +20,6 @@ describe("domain helpers", () => {
 
   it("maps backend errors and computes safe docx filenames", () => {
     expect(mapApiError(new ApiError("导出失败", "EXPORT_FAILED"))?.message).toBe("导出失败，请稍后重试。");
-    expect(exportFilename(sampleThesis({ metadata: { title: '论文:<>?"测试' } }))).toBe("论文-----测试.docx");
+    expect(exportFilename(sampleThesis({ cover: { title: '论文:<>?"测试' } }))).toBe("论文-----测试.docx");
   });
 });

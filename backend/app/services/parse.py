@@ -1,49 +1,69 @@
 from __future__ import annotations
 
 import re
-import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
-from xml.etree import ElementTree as ET
+from typing import Iterable
+from zipfile import ZipFile
 
 from docx import Document
 
-from ..contracts import BodySection, CapabilityFlags, MetadataFields, NormalizedThesis, ReferenceSection, SummarySection
+from ..contracts import (
+    AppendixSection,
+    BodySection,
+    CapabilityFlags,
+    CoverFields,
+    NormalizedThesis,
+    ReferenceItem,
+    SourceFeatures,
+    SummarySection,
+)
 from ..errors import AppError
 
 SPECIAL_TITLE_MAP = {
     "摘要": "abstract_cn",
     "中文摘要": "abstract_cn",
+    "摘要摘要": "abstract_cn",
     "abstract": "abstract_en",
+    "英文摘要": "abstract_en",
     "外文摘要": "abstract_en",
+    "目录": "toc",
     "参考文献": "references",
     "references": "references",
     "致谢": "acknowledgements",
     "致謝": "acknowledgements",
     "acknowledgements": "acknowledgements",
     "acknowledgment": "acknowledgements",
-    "appendix": "appendix",
-    "附录": "appendix",
-    "目录": "toc",
-    "contents": "toc",
+    "附录": "appendices",
+    "appendix": "appendices",
     "注释": "notes",
+    "註釋": "notes",
     "注解": "notes",
     "notes": "notes",
 }
 
-WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-NUMBERED_HEADING_RE = re.compile(r"^(?P<index>\d+(?:\.\d+){0,3})[\.．]?\s+(?P<title>.+)$")
-REFERENCE_ENTRY_MARKER_RE = re.compile(r"\[[A-Z]{1,3}\]", flags=re.IGNORECASE)
-ENGLISH_KEYWORD_PREFIX_RE = re.compile(r"^(keyword|keywords|key words)\s*:", flags=re.IGNORECASE)
-CHINESE_KEYWORD_PREFIX_RE = re.compile(r"^(关键词|關鍵詞)\s*:")
-NUMBERED_HEADING_BLOCKED_KINDS = {"references", "notes", "appendix", "toc"}
-COMPLEX_FEATURE_WARNINGS = {
-    "tables": "检测到表格内容，当前导出为重新排版模式，表格需人工复核。",
-    "images": "检测到图片内容，当前导出不保证图题与版式位置完全保真。",
-    "footnotes": "检测到脚注内容，当前不自动保证页末注格式完全合规。",
-    "endnotes": "检测到篇末注内容，当前不自动保证注释编号与版式完全合规。",
+COVER_FIELD_LABELS = {
+    "title": ["论文题目", "论文名称", "题目", "毕业论文题目"],
+    "advisor": ["指导老师", "指导教师"],
+    "student_name": ["学生姓名", "姓名"],
+    "student_id": ["学号"],
+    "department": ["学院", "院系", "院（系）", "院(系)"],
+    "major": ["专业"],
+    "class_name": ["班级"],
+    "graduation_time": ["毕业时间", "提交日期", "日期"],
 }
+
+MARKDOWN_HEADING = re.compile(r"^(#{1,4})\s+(.+)$")
+CHAPTER_HEADING = re.compile(r"^第[一二三四五六七八九十百千0-9]+章")
+NUMBERED_HEADING = re.compile(r"^(\d+(?:\.\d+){0,3})[\.、]?\s+(.+)$")
+INLINE_FIELD_SPLIT = re.compile(r"[：:]")
+
+
+@dataclass
+class RawBlock:
+    text: str
+    style_name: str | None = None
+    source_index: int = 0
 
 
 @dataclass
@@ -51,318 +71,412 @@ class SectionDraft:
     kind: str
     title: str
     level: int
-    content: str
+    lines: list[str] = field(default_factory=list)
+
+    @property
+    def content(self) -> str:
+        return "\n".join(line.rstrip() for line in self.lines).strip()
 
 
-def normalize_title(value: str) -> str:
-    text = value.strip().strip("#").strip()
-    return re.sub(r"[\s:：\-\._]+", "", text).lower()
-
-
-def looks_like_reference_entry(text: str) -> bool:
-    stripped = text.strip()
-    if not stripped:
-        return False
-    if REFERENCE_ENTRY_MARKER_RE.search(stripped):
-        return True
-    if re.search(r"\b(?:doi|vol\.|no\.|pp\.)\b", stripped, flags=re.IGNORECASE):
-        return True
-    if re.search(r"(出版社|期刊|学报|學報|论文集|論文集)", stripped):
-        return True
-    return bool(re.search(r"\b(?:19|20)\d{2}\b", stripped) and re.search(r"[，,.:：]", stripped))
-
-
-def looks_like_numbered_list_item(title: str) -> bool:
-    text = title.strip()
-    if not text:
-        return True
-    if len(text) > 60:
-        return True
-    if re.search(r"[.．。！？!?；;]$", text):
-        return True
-    if len(re.findall(r"[，,；;。！？!?]", text)) >= 2:
-        return True
-    if REFERENCE_ENTRY_MARKER_RE.search(text):
-        return True
-    return bool(re.search(r"\b(?:19|20)\d{2}\b", text) and re.search(r"[，,.:：]", text))
-
-
-def detect_heading(paragraph_text: str, style_name: Optional[str], current_kind: str = "body") -> Tuple[bool, str, int]:
-    text = paragraph_text.strip()
-    style = (style_name or "").strip().lower().replace(" ", "")
-    if style.startswith("heading"):
-        level_text = re.sub(r"\D+", "", style)
-        level = int(level_text) if level_text else 1
-        return True, text, min(level, 4)
-
-    markdown_match = re.match(r"^(#{1,4})\s+(.+)$", text)
-    if markdown_match:
-        hashes, title = markdown_match.groups()
-        return True, title.strip(), len(hashes)
-
-    numbered_match = NUMBERED_HEADING_RE.match(text)
-    if numbered_match and current_kind not in NUMBERED_HEADING_BLOCKED_KINDS:
-        index = numbered_match.group("index")
-        title = numbered_match.group("title").strip()
-        if title and not looks_like_reference_entry(text) and not looks_like_numbered_list_item(title):
-            return True, title, min(index.count(".") + 1, 4)
-
-    normalized = normalize_title(text)
-    if normalized in SPECIAL_TITLE_MAP:
-        return True, text, 1
-
-    if re.match(r"^第[一二三四五六七八九十百0-9]+章", text):
-        return True, text, 1
-
-    return False, "", 0
+def normalize_compact_text(value: str) -> str:
+    return re.sub(r"[\s:：\-\._·•\(\)（）]+", "", (value or "")).strip().lower()
 
 
 def split_keywords(text: str, english: bool) -> tuple[str, list[str]]:
-    lines = [line.strip() for line in text.splitlines()]
+    lines = [line.strip() for line in (text or "").splitlines()]
     body_lines: list[str] = []
-    keywords = ""
-    prefix_pattern = ENGLISH_KEYWORD_PREFIX_RE if english else CHINESE_KEYWORD_PREFIX_RE
+    keywords_text = ""
+    prefixes = ["keywords", "keyword"] if english else ["关键词", "關鍵詞"]
     for line in lines:
-        normalized = line.strip().replace("：", ":")
-        if prefix_pattern.match(normalized):
-            keywords = normalized.split(":", 1)[-1].strip()
-        else:
-            body_lines.append(line)
-    items = [item.strip() for item in re.split(r"[，,；;、]", keywords) if item.strip()]
-    return "\n".join(body_lines).strip(), items
+        normalized = line.lower().replace("：", ":")
+        if any(normalized.startswith(prefix) for prefix in prefixes):
+            keywords_text = line.split(":", 1)[-1].split("：", 1)[-1].strip()
+            continue
+        body_lines.append(line)
+    keywords = [item.strip() for item in re.split(r"[，,；;、]", keywords_text) if item.strip()]
+    return "\n".join(body_lines).strip(), keywords
+
+
+def normalize_reference_text(text: str) -> tuple[str, str]:
+    raw_text = " ".join((text or "").strip().split())
+    normalized = raw_text
+    normalized = re.sub(r"^[\[\(【]?\d+[\]\)】\.、\s]*", "", normalized)
+    normalized = normalized.replace("：", ": ").replace("，", ", ")
+    normalized = re.sub(r"\s+", " ", normalized).strip(" ;")
+    normalized = re.sub(r"\s+([,.;:])", r"\1", normalized)
+    normalized = re.sub(r"([A-Za-z])\.\s*([A-Za-z])", r"\1. \2", normalized)
+    return raw_text, normalized
 
 
 def build_capabilities(capabilities: CapabilityFlags) -> CapabilityFlags:
     return capabilities.model_copy(deep=True)
 
 
-def normalize_body_text(text: str) -> str:
-    return re.sub(r"\s+", "", text or "")
+def make_source_features_docx(path: Path, document: Document) -> SourceFeatures:
+    with ZipFile(path) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8", errors="ignore")
+        footnotes_xml = archive.read("word/footnotes.xml").decode("utf-8", errors="ignore") if "word/footnotes.xml" in archive.namelist() else ""
+    return SourceFeatures(
+        table_count=len(document.tables),
+        image_count=document_xml.count("<w:drawing"),
+        footnote_count=footnotes_xml.count("<w:footnote ") if footnotes_xml else 0,
+        textbox_count=document_xml.count("w:txbxContent"),
+        shape_count=document_xml.count("<w:pict") + document_xml.count("<v:shape") + document_xml.count("<wps:wsp"),
+        field_count=document_xml.count("<w:instrText"),
+        rich_run_count=sum(1 for paragraph in document.paragraphs if len([run for run in paragraph.runs if run.text.strip()]) > 1),
+    )
 
 
-def looks_like_title(value: str) -> bool:
+def build_source_features_text() -> SourceFeatures:
+    return SourceFeatures()
+
+
+def build_manual_review_flags(source_type: str, features: SourceFeatures) -> list[str]:
+    flags: list[str] = []
+    if source_type == "docx":
+        if features.table_count:
+            flags.append(f"检测到 {features.table_count} 个表格，导出后需人工复核。")
+        if features.image_count:
+            flags.append(f"检测到 {features.image_count} 个图片或绘图对象，导出后需人工复核。")
+        if features.footnote_count:
+            flags.append(f"检测到 {features.footnote_count} 个脚注或尾注引用，导出后需人工复核。")
+        if features.textbox_count or features.shape_count:
+            flags.append("检测到文本框或形状对象，导出后需人工复核。")
+        if features.field_count:
+            flags.append("检测到原始 Word 字段或域代码，导出后需人工复核。")
+    return flags
+
+
+def detect_heading(block: RawBlock) -> tuple[bool, str, int, str]:
+    text = block.text.strip()
+    if not text:
+        return False, "", 0, "body"
+
+    style = (block.style_name or "").strip().lower()
+    if style.startswith("heading"):
+        digits = re.sub(r"\D+", "", style)
+        level = min(int(digits) if digits else 1, 4)
+        title = text
+        kind = SPECIAL_TITLE_MAP.get(normalize_compact_text(title), "body")
+        return True, title, level, kind
+
+    markdown_match = MARKDOWN_HEADING.match(text)
+    if markdown_match:
+        hashes, title = markdown_match.groups()
+        kind = SPECIAL_TITLE_MAP.get(normalize_compact_text(title), "body")
+        return True, title.strip(), len(hashes), kind
+
+    normalized = normalize_compact_text(text)
+    if normalized in SPECIAL_TITLE_MAP:
+        return True, text, 1, SPECIAL_TITLE_MAP[normalized]
+
+    if CHAPTER_HEADING.match(text):
+        return True, text, 1, "body"
+
+    numbered = NUMBERED_HEADING.match(text)
+    if numbered:
+        prefix, title = numbered.groups()
+        level = prefix.count(".") + 1
+        return True, text, min(level, 4), "body"
+
+    return False, "", 0, "body"
+
+
+def is_likely_cover_label(text: str) -> bool:
+    normalized = normalize_compact_text(text)
+    return any(normalized.startswith(normalize_compact_text(alias)) for aliases in COVER_FIELD_LABELS.values() for alias in aliases)
+
+
+def is_likely_title(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
-    if len(text) > 40:
+    if len(text) > 80:
         return False
-    normalized = normalize_title(text)
-    if normalized in SPECIAL_TITLE_MAP or normalized in {"正文", "无标题", "引言", "绪论", "前言", "结论"}:
+    normalized = normalize_compact_text(text)
+    if normalized in SPECIAL_TITLE_MAP or normalized in {"正文", "引言", "绪论", "前言", "结论"}:
         return False
-    if re.match(r"^(第[一二三四五六七八九十百0-9]+章|chapter\s+\d+)", text, flags=re.IGNORECASE):
+    if is_likely_cover_label(text):
+        return False
+    if CHAPTER_HEADING.match(text):
+        return False
+    if NUMBERED_HEADING.match(text):
         return False
     return True
 
 
-def extract_title(front_matter: list[str], sections: list[SectionDraft]) -> str:
-    for candidate in front_matter[:3]:
-        if looks_like_title(candidate):
-            return candidate.strip()
-
-    for section in sections:
-        if section.kind == "body" and looks_like_title(section.title):
-            body_text = normalize_body_text(section.content)
-            if len(body_text) > 120:
-                return section.title.strip()
-
-    return ""
-
-
-def note_part_has_user_content(data: bytes, tag_name: str) -> bool:
-    try:
-        root = ET.fromstring(data)
-    except ET.ParseError:
-        return False
-    for node in root.findall(f"w:{tag_name}", WORD_NS):
-        note_id = node.attrib.get(f"{{{WORD_NS['w']}}}id")
-        if note_id in {"-1", "0", "1"}:
+def consume_following_lines(lines: list[str], start: int, *, allow_multiline: bool) -> tuple[str, set[int]]:
+    consumed = {start}
+    collected: list[str] = []
+    for index in range(start + 1, len(lines)):
+        candidate = lines[index].strip()
+        if not candidate:
+            if collected:
+                break
+            consumed.add(index)
             continue
-        text = "".join(node.itertext()).strip()
-        if text:
-            return True
-    return False
+        if is_likely_cover_label(candidate) or normalize_compact_text(candidate) in SPECIAL_TITLE_MAP:
+            break
+        collected.append(candidate)
+        consumed.add(index)
+        if not allow_multiline:
+            break
+    return "\n".join(collected).strip(), consumed
 
 
-def inspect_docx_features(path: Path, document: Document) -> list[str]:
-    features: list[str] = []
-    if document.tables:
-        features.append("tables")
+def extract_cover(front_lines: list[str]) -> tuple[CoverFields, set[int]]:
+    cover = CoverFields()
+    consumed: set[int] = set()
 
-    try:
-        with zipfile.ZipFile(path) as archive:
-            names = set(archive.namelist())
-            if any(name.startswith("word/media/") for name in names):
-                features.append("images")
-            if "word/footnotes.xml" in names and note_part_has_user_content(archive.read("word/footnotes.xml"), "footnote"):
-                features.append("footnotes")
-            if "word/endnotes.xml" in names and note_part_has_user_content(archive.read("word/endnotes.xml"), "endnote"):
-                features.append("endnotes")
-    except zipfile.BadZipFile:
-        raise AppError("DOCX_INVALID", "上传文件不是有效的 .docx 文档，请确认文件未损坏。", status_code=400) from None
+    if front_lines and front_lines[0].strip() == "华南师范大学":
+        consumed.add(0)
 
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for item in features:
-        if item in seen:
+    for index, line in enumerate(front_lines):
+        stripped = line.strip()
+        if not stripped or index in consumed:
             continue
-        seen.add(item)
-        ordered.append(item)
-    return ordered
+        normalized = normalize_compact_text(stripped)
+        for field, aliases in COVER_FIELD_LABELS.items():
+            if not any(normalized.startswith(normalize_compact_text(alias)) for alias in aliases):
+                continue
+            _, _, remainder = stripped.partition("：")
+            if not remainder:
+                _, _, remainder = stripped.partition(":")
+            value = remainder.strip()
+            extra_consumed = {index}
+            if not value:
+                value, extra_consumed = consume_following_lines(front_lines, index, allow_multiline=field == "title")
+            if field == "title" and value and not cover.title:
+                cover.title = value
+            elif field == "advisor" and value and not cover.advisor:
+                cover.advisor = value
+            elif field == "student_name" and value and not cover.student_name:
+                cover.student_name = value
+            elif field == "student_id" and value and not cover.student_id:
+                cover.student_id = value
+            elif field == "department" and value and not cover.department:
+                cover.department = value
+            elif field == "major" and value and not cover.major:
+                cover.major = value
+            elif field == "class_name" and value and not cover.class_name:
+                cover.class_name = value
+            elif field == "graduation_time" and value and not cover.graduation_time:
+                cover.graduation_time = value
+            consumed.update(extra_consumed)
+            break
+
+    if not cover.title:
+        title_lines = [line.strip() for idx, line in enumerate(front_lines) if idx not in consumed and is_likely_title(line)]
+        if title_lines:
+            cover.title = "\n".join(title_lines[:2]).strip()
+            for idx, line in enumerate(front_lines):
+                if line.strip() in title_lines[:2]:
+                    consumed.add(idx)
+
+    return cover, consumed
 
 
-def parse_docx_file(path: Path, capabilities: CapabilityFlags) -> NormalizedThesis:
-    if path.suffix.lower() != ".docx":
-        raise AppError("UNSUPPORTED_FILE_TYPE", "仅支持上传 .docx 文件", status_code=400)
-
+def extract_raw_blocks_from_docx(path: Path) -> tuple[list[RawBlock], SourceFeatures]:
     try:
         document = Document(path)
     except Exception as exc:  # pragma: no cover
         raise AppError("PARSE_FAILED", "无法读取这个 .docx 的正文内容，请确认文件未损坏。", details={"reason": str(exc)}, status_code=400) from exc
 
-    paragraphs: List[Tuple[str, Optional[str]]] = []
-    for paragraph in document.paragraphs:
-        style_name = paragraph.style.name if paragraph.style is not None else None
-        paragraphs.append((paragraph.text, style_name))
-
-    source_features = inspect_docx_features(path, document)
-    thesis = normalized_from_paragraphs(paragraphs, "docx", capabilities, source_features=source_features)
-    for feature in source_features:
-        warning = COMPLEX_FEATURE_WARNINGS.get(feature)
-        if warning and warning not in thesis.warnings:
-            thesis.warnings.append(warning)
-    if not thesis.warnings and len(document.paragraphs) <= 2:
-        thesis.warnings.append("文档段落较少，请检查是否上传了完整论文内容。")
-    return thesis
+    raw_blocks = [
+        RawBlock(
+            text=paragraph.text,
+            style_name=paragraph.style.name if paragraph.style is not None else None,
+            source_index=index,
+        )
+        for index, paragraph in enumerate(document.paragraphs)
+        if paragraph.text.strip()
+    ]
+    return raw_blocks, make_source_features_docx(path, document)
 
 
-def normalize_text_input(text: str, capabilities: CapabilityFlags) -> NormalizedThesis:
-    paragraphs = [(line, None) for line in text.splitlines()]
-    return normalized_from_paragraphs(paragraphs, "text", capabilities, source_features=[])
+def extract_raw_blocks_from_text(text: str) -> tuple[list[RawBlock], SourceFeatures]:
+    raw_blocks = [RawBlock(text=line, style_name=None, source_index=index) for index, line in enumerate(text.splitlines()) if line.strip()]
+    return raw_blocks, build_source_features_text()
 
 
-def normalized_from_paragraphs(
-    paragraphs: List[Tuple[str, Optional[str]]],
+def body_title_for_missing_input() -> str:
+    return "正文"
+
+
+def normalized_from_raw_blocks(
+    raw_blocks: list[RawBlock],
     source_type: str,
     capabilities: CapabilityFlags,
-    *,
-    source_features: list[str],
+    source_features: SourceFeatures,
 ) -> NormalizedThesis:
-    sections: list[SectionDraft] = []
-    warnings: list[str] = []
-    current_title = ""
-    current_kind = "body"
-    current_level = 1
-    current_lines: list[str] = []
-    front_matter: list[str] = []
+    if not raw_blocks:
+        raise AppError("CONTENT_EMPTY", "文档中没有可用文本内容。", status_code=400)
+
+    first_heading_index: int | None = None
+    for index, block in enumerate(raw_blocks):
+        is_heading, _, _, _ = detect_heading(block)
+        if is_heading:
+            first_heading_index = index
+            break
+
+    front_blocks = raw_blocks[: first_heading_index or 0]
+    cover, consumed_front = extract_cover([block.text for block in front_blocks])
+    front_remainder = [block.text.strip() for idx, block in enumerate(front_blocks) if idx not in consumed_front and block.text.strip()]
+
+    drafts: list[SectionDraft] = []
+    current: SectionDraft | None = None
+    orphan_lines: list[str] = list(front_remainder)
 
     def flush_current() -> None:
-        nonlocal current_title, current_kind, current_level, current_lines
-        content = "\n".join(line for line in current_lines if line.strip()).strip()
-        if current_title or content:
-            sections.append(
-                SectionDraft(
-                    kind=current_kind,
-                    title=current_title or "正文",
-                    level=current_level or 1,
-                    content=content,
-                )
-            )
-        current_title = ""
-        current_kind = "body"
-        current_level = 1
-        current_lines = []
+        nonlocal current
+        if current is None:
+            return
+        drafts.append(current)
+        current = None
 
-    for text, style_name in paragraphs:
-        value = text.strip()
-        if not value:
-            if current_lines:
-                current_lines.append("")
+    for block in raw_blocks[first_heading_index or 0 :]:
+        text = block.text.strip()
+        if not text:
             continue
-
-        is_heading, heading_title, level = detect_heading(value, style_name, current_kind)
+        is_heading, heading_title, level, kind = detect_heading(block)
         if is_heading:
             flush_current()
-            current_title = heading_title
-            current_kind = SPECIAL_TITLE_MAP.get(normalize_title(heading_title), "body")
-            current_level = level or 1
+            current = SectionDraft(kind=kind, title=heading_title.strip(), level=level or 1)
             continue
 
-        if current_title:
-            current_lines.append(value)
-        else:
-            front_matter.append(value)
+        if current is None:
+            orphan_lines.append(text)
+            continue
+        current.lines.append(text)
 
     flush_current()
 
-    if not sections and front_matter:
-        sections.append(SectionDraft(kind="body", title="正文", level=1, content="\n".join(front_matter).strip()))
-    elif front_matter:
-        warnings.append("检测到未归类的前置内容，已并入正文开头。")
-        for section in sections:
-            if section.kind == "body":
-                section.content = "\n".join(front_matter + [section.content]).strip()
-                break
-        else:
-            sections.insert(0, SectionDraft(kind="body", title="正文", level=1, content="\n".join(front_matter).strip()))
-
-    if not sections:
-        raise AppError("CONTENT_EMPTY", "文档中没有可用文本内容", status_code=400)
-
-    title = extract_title(front_matter, sections)
+    abstract_cn = SummarySection()
+    abstract_en = SummarySection()
     body_sections: list[BodySection] = []
-    abstract_cn = ""
-    abstract_cn_keywords: list[str] = []
-    abstract_en = ""
-    abstract_en_keywords: list[str] = []
-    notes = ""
-    references: list[str] = []
+    references: list[ReferenceItem] = []
+    appendices: list[AppendixSection] = []
     acknowledgements = ""
-    appendix = ""
+    notes = ""
 
-    for index, section in enumerate(sections, start=1):
-        if section.kind == "abstract_cn" and not abstract_cn:
-            abstract_cn, abstract_cn_keywords = split_keywords(section.content, english=False)
-        elif section.kind == "abstract_en" and not abstract_en:
-            abstract_en, abstract_en_keywords = split_keywords(section.content, english=True)
-        elif section.kind == "notes":
-            notes = "\n\n".join(part for part in [notes, section.content.strip()] if part)
-        elif section.kind == "references":
-            references = [item.strip() for item in section.content.splitlines() if item.strip()]
-        elif section.kind == "acknowledgements":
-            acknowledgements = section.content.strip()
-        elif section.kind == "appendix":
-            appendix = section.content.strip()
-        elif section.kind == "toc":
+    appendix_counter = 1
+    for draft in drafts:
+        content = draft.content
+        if draft.kind == "abstract_cn" and not abstract_cn.content:
+            body, keywords = split_keywords(content, english=False)
+            abstract_cn = SummarySection(content=body, keywords=keywords)
+            if not cover.title and orphan_lines and is_likely_title(orphan_lines[0]):
+                cover.title = orphan_lines.pop(0)
+        elif draft.kind == "abstract_en" and not abstract_en.content:
+            body, keywords = split_keywords(content, english=True)
+            abstract_en = SummarySection(content=body, keywords=keywords)
+        elif draft.kind == "references":
+            for line in content.splitlines():
+                if not line.strip():
+                    continue
+                raw_text, normalized_text = normalize_reference_text(line)
+                references.append(ReferenceItem(raw_text=raw_text, normalized_text=normalized_text))
+        elif draft.kind == "appendices":
+            title = draft.title.strip() or f"附录 {appendix_counter}"
+            appendices.append(AppendixSection(id=f"appendix-{appendix_counter}", title=title, content=content))
+            appendix_counter += 1
+        elif draft.kind == "acknowledgements":
+            acknowledgements = "\n".join(item for item in [acknowledgements, content] if item).strip()
+        elif draft.kind == "notes":
+            notes = "\n".join(item for item in [notes, content] if item).strip()
+        elif draft.kind == "toc":
             continue
         else:
             body_sections.append(
                 BodySection(
-                    id=f"section-{index}",
-                    level=section.level,
-                    title=section.title.strip() or "正文",
-                    content=section.content.strip(),
+                    id=f"section-{len(body_sections) + 1}",
+                    level=draft.level,
+                    title=draft.title.strip() or body_title_for_missing_input(),
+                    content=content,
                 )
             )
 
-    if not abstract_cn:
-        warnings.append("未识别到中文摘要，可在下一步补充。")
-    if not abstract_en:
-        warnings.append("未识别到外文摘要，可在下一步补充。")
+    orphan_body = "\n".join(line for line in orphan_lines if line.strip()).strip()
+    if orphan_body:
+        if body_sections:
+            body_sections[0].content = "\n".join(item for item in [orphan_body, body_sections[0].content] if item).strip()
+        else:
+            body_sections.append(
+                BodySection(
+                    id="section-1",
+                    level=1,
+                    title=body_title_for_missing_input(),
+                    content=orphan_body,
+                )
+            )
+
     if not body_sections:
-        raise AppError("CONTENT_EMPTY", "未识别到可用正文内容", status_code=400)
+        raise AppError("CONTENT_EMPTY", "未识别到可映射为论文正文的内容。", status_code=400)
+
+    missing_sections: list[str] = []
+    for field in ["title", "advisor", "student_name", "student_id", "department", "major", "class_name", "graduation_time"]:
+        if not getattr(cover, field).strip():
+            missing_sections.append(f"cover.{field}")
+    if not abstract_cn.content.strip():
+        missing_sections.append("abstract_cn")
+    if not abstract_en.content.strip():
+        missing_sections.append("abstract_en")
+    if not abstract_cn.keywords:
+        missing_sections.append("keywords_cn")
+    if abstract_en.content.strip() and not abstract_en.keywords:
+        missing_sections.append("keywords_en")
+    if not references:
+        missing_sections.append("references")
+    if not appendices or not any(item.content.strip() for item in appendices):
+        missing_sections.append("appendices")
+    if not acknowledgements.strip():
+        missing_sections.append("acknowledgements")
+    if not notes.strip():
+        missing_sections.append("notes")
+
+    manual_review_flags = build_manual_review_flags(source_type, source_features)
+    warnings = manual_review_flags.copy()
+    if "abstract_cn" in missing_sections:
+        warnings.append("未识别到中文摘要，导出时会保留摘要章节留白。")
+    if "abstract_en" in missing_sections:
+        warnings.append("未识别到英文摘要，导出时会保留摘要章节留白。")
+    if "references" in missing_sections:
+        warnings.append("未识别到参考文献，导出时会保留参考文献章节留白。")
+    if "appendices" in missing_sections:
+        warnings.append("未识别到附录，导出时会保留附录章节留白。")
+    if "acknowledgements" in missing_sections:
+        warnings.append("未识别到致谢，导出时会保留致谢章节留白。")
+
+    if not cover.title and body_sections:
+        first_body_title = body_sections[0].title.strip()
+        if is_likely_title(first_body_title) and len(re.sub(r"\s+", "", body_sections[0].content)) > 50:
+            cover.title = first_body_title
 
     return NormalizedThesis(
         source_type="docx" if source_type == "docx" else "text",
-        metadata=MetadataFields(title=title),
-        abstract_cn=SummarySection(content=abstract_cn, keywords=abstract_cn_keywords),
-        abstract_en=SummarySection(content=abstract_en, keywords=abstract_en_keywords),
+        cover=cover,
+        abstract_cn=abstract_cn,
+        abstract_en=abstract_en,
         body_sections=body_sections,
-        notes=notes,
-        references=ReferenceSection(items=references),
+        references=references,
+        appendices=appendices,
         acknowledgements=acknowledgements,
-        appendix=appendix,
-        source_features=source_features,
+        notes=notes,
         warnings=warnings,
-        parse_errors=[],
+        manual_review_flags=manual_review_flags,
+        missing_sections=missing_sections,
+        source_features=source_features,
         capabilities=build_capabilities(capabilities),
     )
+
+
+def parse_docx_file(path: Path, capabilities: CapabilityFlags) -> NormalizedThesis:
+    if path.suffix.lower() != ".docx":
+        raise AppError("UNSUPPORTED_FILE_TYPE", "仅支持上传 .docx 文件。", status_code=400)
+    raw_blocks, source_features = extract_raw_blocks_from_docx(path)
+    return normalized_from_raw_blocks(raw_blocks, "docx", capabilities, source_features)
+
+
+def normalize_text_input(text: str, capabilities: CapabilityFlags) -> NormalizedThesis:
+    raw_blocks, source_features = extract_raw_blocks_from_text(text)
+    return normalized_from_raw_blocks(raw_blocks, "text", capabilities, source_features)

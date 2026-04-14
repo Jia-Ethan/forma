@@ -5,15 +5,16 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-class MetadataFields(BaseModel):
+class CoverFields(BaseModel):
     title: str = ""
-    author_name: str = ""
+    advisor: str = ""
+    student_name: str = ""
     student_id: str = ""
+    school: str = "华南师范大学"
     department: str = ""
     major: str = ""
     class_name: str = ""
-    advisor_name: str = ""
-    submission_date: str = ""
+    graduation_time: str = ""
 
 
 class SummarySection(BaseModel):
@@ -33,8 +34,26 @@ class BodySection(BaseModel):
         return min(max(value, 1), 4)
 
 
-class ReferenceSection(BaseModel):
-    items: list[str] = Field(default_factory=list)
+class ReferenceItem(BaseModel):
+    raw_text: str = ""
+    normalized_text: str = ""
+    detected_type: str = ""
+
+
+class AppendixSection(BaseModel):
+    id: str
+    title: str = ""
+    content: str = ""
+
+
+class SourceFeatures(BaseModel):
+    table_count: int = 0
+    image_count: int = 0
+    footnote_count: int = 0
+    textbox_count: int = 0
+    shape_count: int = 0
+    field_count: int = 0
+    rich_run_count: int = 0
 
 
 class CapabilityFlags(BaseModel):
@@ -44,17 +63,18 @@ class CapabilityFlags(BaseModel):
 
 class NormalizedThesis(BaseModel):
     source_type: Literal["docx", "text"] = "text"
-    metadata: MetadataFields = Field(default_factory=MetadataFields)
+    cover: CoverFields = Field(default_factory=CoverFields)
     abstract_cn: SummarySection = Field(default_factory=SummarySection)
     abstract_en: SummarySection = Field(default_factory=SummarySection)
     body_sections: list[BodySection] = Field(default_factory=list)
-    notes: str = ""
-    references: ReferenceSection = Field(default_factory=ReferenceSection)
+    references: list[ReferenceItem] = Field(default_factory=list)
+    appendices: list[AppendixSection] = Field(default_factory=list)
     acknowledgements: str = ""
-    appendix: str = ""
-    source_features: list[str] = Field(default_factory=list)
+    notes: str = ""
     warnings: list[str] = Field(default_factory=list)
-    parse_errors: list[str] = Field(default_factory=list)
+    manual_review_flags: list[str] = Field(default_factory=list)
+    missing_sections: list[str] = Field(default_factory=list)
+    source_features: SourceFeatures = Field(default_factory=SourceFeatures)
     capabilities: CapabilityFlags = Field(default_factory=CapabilityFlags)
 
 
@@ -78,13 +98,35 @@ class PrecheckIssue(BaseModel):
     id: str
     code: str
     severity: Literal["blocking", "warning", "info"]
-    block: Literal["title", "abstract_cn", "abstract_en", "keywords", "body", "references", "acknowledgements", "appendix", "metadata"]
+    block: Literal[
+        "cover",
+        "abstract_cn",
+        "abstract_en",
+        "keywords",
+        "body",
+        "references",
+        "appendices",
+        "acknowledgements",
+        "notes",
+        "complex_elements",
+    ]
     title: str
     message: str
 
 
 class PreviewBlock(BaseModel):
-    key: Literal["title", "abstract_cn", "abstract_en", "keywords", "body", "references", "acknowledgements", "appendix", "metadata"]
+    key: Literal[
+        "cover",
+        "abstract_cn",
+        "abstract_en",
+        "keywords",
+        "body",
+        "references",
+        "appendices",
+        "acknowledgements",
+        "notes",
+        "complex_elements",
+    ]
     label: str
     status: Literal["ok", "warning", "blocking"]
     preview: str

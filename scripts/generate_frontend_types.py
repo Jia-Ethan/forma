@@ -4,17 +4,19 @@ from pathlib import Path
 from typing import Any
 
 from backend.app.contracts import (
+    AppendixSection,
     BodySection,
     CapabilityFlags,
+    CoverFields,
     HealthResponse,
-    MetadataFields,
     NormalizedThesis,
     PrecheckIssue,
     PrecheckResponse,
     PrecheckSummary,
     PreviewBlock,
-    ReferenceSection,
+    ReferenceItem,
     ServiceLimits,
+    SourceFeatures,
     SummarySection,
     TextPrecheckRequest,
 )
@@ -22,10 +24,12 @@ from backend.app.contracts import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = PROJECT_ROOT / "web" / "src" / "generated" / "contracts.ts"
 MODELS = [
-    MetadataFields,
+    CoverFields,
     SummarySection,
     BodySection,
-    ReferenceSection,
+    ReferenceItem,
+    AppendixSection,
+    SourceFeatures,
     CapabilityFlags,
     NormalizedThesis,
     PrecheckIssue,
