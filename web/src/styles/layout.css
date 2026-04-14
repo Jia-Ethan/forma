@@ -1,60 +1,125 @@
 .minimal-page {
+  position: relative;
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: var(--space-8) var(--space-5);
+  padding: clamp(2.5rem, 8vw, 4.75rem) var(--space-5);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.minimal-page::before {
+  content: "";
+  position: absolute;
+  inset: 4% 10% auto;
+  height: min(24rem, 38vw);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.72), transparent 68%);
+  filter: blur(20px);
+  opacity: 0.8;
+  pointer-events: none;
 }
 
 .minimal-hero {
-  width: min(100%, 48rem);
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 54rem);
   display: grid;
-  gap: var(--space-4);
+  gap: clamp(1rem, 2.6vw, 1.45rem);
   justify-items: center;
+  padding: clamp(1.6rem, 4vw, 2.6rem) clamp(0.4rem, 3vw, 1rem);
+  --ambient-pointer-x: 50%;
+  --ambient-pointer-y: 42%;
+  --ambient-shift-x: 0px;
+  --ambient-shift-y: 0px;
 }
 
 .minimal-logo {
+  position: relative;
+  z-index: 1;
   color: var(--text-primary);
-  letter-spacing: 0;
+  letter-spacing: -0.03em;
   margin: 0;
-  font-size: clamp(2rem, 6vw, 2.8rem);
-  font-weight: 800;
-  line-height: 1;
+  font-size: clamp(2.4rem, 7vw, 3.15rem);
+  font-weight: 780;
+  line-height: 0.92;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.hero-ambient {
+  position: absolute;
+  inset: -18% -16% -24%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-ambient__layer,
+.hero-ambient__grain {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-ambient__layer--wash {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(161, 214, 255, 0.42), transparent 30%),
+    radial-gradient(circle at 82% 16%, rgba(255, 255, 255, 0.9), transparent 34%),
+    radial-gradient(circle at 50% 84%, rgba(206, 227, 245, 0.42), transparent 36%);
+  transform: translate3d(calc(var(--ambient-shift-x) * 0.35), calc(var(--ambient-shift-y) * 0.35), 0);
+  opacity: 0.94;
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-slow) var(--ease-standard);
+}
+
+.hero-ambient__layer--drift {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.54), rgba(226, 239, 252, 0.22) 42%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(circle at 62% 32%, rgba(152, 212, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 32% 70%, rgba(255, 255, 255, 0.56), transparent 26%);
+  filter: blur(7px);
+  opacity: 0.62;
+  animation: ambient-drift 20s var(--ease-standard) infinite alternate;
+}
+
+.hero-ambient__layer--halo {
+  background: radial-gradient(circle at var(--ambient-pointer-x) var(--ambient-pointer-y), rgba(255, 255, 255, 0.84), rgba(166, 215, 255, 0.3) 19%, rgba(166, 215, 255, 0.12) 28%, transparent 56%);
+  transform: translate3d(calc(var(--ambient-shift-x) * 0.9), calc(var(--ambient-shift-y) * 0.9), 0);
+  filter: blur(10px);
+  opacity: 0.38;
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-standard);
+}
+
+.hero-ambient__grain {
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.26), transparent 36%),
+    linear-gradient(295deg, rgba(214, 233, 250, 0.14), transparent 34%);
+  mix-blend-mode: soft-light;
+  opacity: 0.65;
 }
 
 .composer-shell {
-  width: min(100%, 42rem);
+  position: relative;
+  z-index: 1;
+  width: min(100%, 43rem);
   display: grid;
-  gap: 0.65rem;
+  gap: 0.8rem;
 }
 
 .composer {
+  position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.7rem;
   align-items: center;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--border-base);
-  border-radius: 1.4rem;
-  background: var(--bg-panel);
-  box-shadow: 0 14px 34px rgba(145, 173, 206, 0.1);
-  transition:
-    border-color var(--motion-base) var(--ease-standard),
-    box-shadow var(--motion-base) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard);
-}
-
-.composer:focus-within,
-.composer:hover {
-  border-color: var(--border-accent);
-  box-shadow: 0 18px 42px rgba(145, 173, 206, 0.14);
-}
-
-.composer-busy {
-  align-items: center;
+  min-height: 4.35rem;
+  padding: 0.78rem 0.86rem;
 }
 
 .composer-progress {
-  min-height: 2.6rem;
+  min-height: 2.85rem;
   display: grid;
   align-items: center;
 }
@@ -62,23 +127,25 @@
 .composer-textarea,
 .composer-file-pill {
   width: 100%;
-  min-height: 1.7rem;
+  min-height: 2rem;
 }
 
 .composer-meta {
-  display: flex;
-  justify-content: space-between;
+  width: 100%;
+  min-height: 1.55rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: center;
-  padding: 0 0.25rem;
+  padding: 0 0.4rem;
 }
 
 .inline-error {
-  width: min(100%, 42rem);
-  min-height: 1.75rem;
-  color: var(--text-danger);
+  position: relative;
+  z-index: 1;
+  width: min(100%, 43rem);
+  min-height: 2.4rem;
   text-align: left;
-  font-size: var(--text-sm);
 }
 
 .modal-overlay {
@@ -116,16 +183,31 @@
 
 @media (max-width: 820px) {
   .minimal-page {
-    padding: var(--space-7) var(--space-4);
+    padding: clamp(1.75rem, 10vw, 3.4rem) var(--space-4);
+  }
+
+  .minimal-hero {
+    gap: 0.95rem;
+    padding: 1.35rem 0 1rem;
+  }
+
+  .minimal-logo {
+    font-size: clamp(2.15rem, 12vw, 2.75rem);
+  }
+
+  .hero-ambient {
+    inset: -12% -12% -18%;
   }
 
   .composer {
-    gap: 0.5rem;
-    padding: 0.6rem 0.65rem;
+    min-height: 4rem;
+    gap: 0.58rem;
+    padding: 0.72rem 0.72rem;
   }
 
   .composer-meta {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
     align-items: flex-start;
   }
 
@@ -135,5 +217,27 @@
 
   .precheck-modal {
     padding: var(--space-5);
+  }
+}
+
+@media (max-width: 560px) {
+  .minimal-page {
+    place-items: start center;
+    padding-top: max(14vh, 4.8rem);
+  }
+
+  .minimal-hero {
+    width: min(100%, 30rem);
+    gap: 0.8rem;
+    padding-top: 0;
+  }
+
+  .minimal-logo {
+    font-size: clamp(2rem, 12vw, 2.4rem);
+  }
+
+  .composer-shell,
+  .inline-error {
+    width: 100%;
   }
 }

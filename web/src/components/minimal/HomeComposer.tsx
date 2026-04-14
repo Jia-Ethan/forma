@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import type { FlowPhase } from "../../app/domain";
 import { WaveExportProgress } from "./WaveExportProgress";
 
@@ -12,18 +12,37 @@ type HomeComposerProps = {
   onFileSelect: (file: File | null) => void;
   onSubmit: () => void;
   onClear: () => void;
+  onDragActiveChange?: (active: boolean) => void;
 };
 
-export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onTextChange, onUploadTrigger, onFileSelect, onSubmit, onClear }: HomeComposerProps) {
+function hasFiles(event: Pick<DragEvent, "dataTransfer"> | Pick<ReactDragEvent, "dataTransfer">) {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+export function HomeComposer({
+  rawText,
+  selectedFile,
+  phase,
+  exportProgress,
+  onTextChange,
+  onUploadTrigger,
+  onFileSelect,
+  onSubmit,
+  onClear,
+  onDragActiveChange,
+}: HomeComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
+  const [isDragActive, setIsDragActive] = useState(false);
   const hasContent = Boolean(selectedFile || rawText.trim());
   const disabled = phase === "prechecking" || phase === "exporting";
+  const hintText = phase === "prechecking" ? "正在进行结构识别与规则检查…" : hasContent ? "按 Cmd/Ctrl + Enter 开始预检" : null;
 
-  const placeholder = useMemo(() => {
-    if (selectedFile) return selectedFile.name;
-    return "上传 .docx 或粘贴论文内容";
-  }, [selectedFile]);
+  function setDragActive(active: boolean) {
+    setIsDragActive(active);
+    onDragActiveChange?.(active);
+  }
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -46,15 +65,55 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [rawText, selectedFile, phase]);
 
+  function resetDragState() {
+    dragDepthRef.current = 0;
+    setDragActive(false);
+  }
+
   return (
-    <div className="composer-shell">
-      <div className={`composer ${selectedFile ? "composer-file" : ""} ${disabled ? "composer-busy" : ""}`} tabIndex={selectedFile ? 0 : -1} onKeyDown={(event) => {
-        if (!selectedFile || disabled) return;
-        if (event.key === "Enter") {
+    <div className="composer-shell" data-has-content={hasContent} data-busy={disabled}>
+      <div
+        className={`composer ${selectedFile ? "composer-file" : ""} ${disabled ? "composer-busy" : ""}`}
+        data-drag-active={isDragActive}
+        data-has-file={Boolean(selectedFile)}
+        data-busy={disabled}
+        tabIndex={selectedFile ? 0 : -1}
+        aria-busy={disabled}
+        onKeyDown={(event) => {
+          if (!selectedFile || disabled) return;
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
+        onDragEnter={(event) => {
+          if (!hasFiles(event)) return;
           event.preventDefault();
-          onSubmit();
-        }
-      }}>
+          dragDepthRef.current += 1;
+          if (!disabled) setDragActive(true);
+        }}
+        onDragOver={(event) => {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = disabled ? "none" : "copy";
+          if (!disabled && !isDragActive) setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+          if (dragDepthRef.current === 0) setDragActive(false);
+        }}
+        onDrop={(event) => {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          const file = event.dataTransfer.files?.[0] ?? null;
+          resetDragState();
+          if (!file || disabled) return;
+          if (!onUploadTrigger()) return;
+          onFileSelect(file);
+        }}
+      >
         <button
           type="button"
           className="composer-plus"
@@ -72,6 +131,7 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
           className="composer-file-input visually-hidden-input"
           type="file"
           accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          hidden
           tabIndex={-1}
           aria-hidden="true"
           disabled={disabled}
@@ -98,7 +158,6 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
             ref={textareaRef}
             className="composer-textarea"
             aria-label="论文正文输入框"
-            placeholder={placeholder}
             value={rawText}
             disabled={disabled}
             onChange={(event) => onTextChange(event.target.value)}
@@ -117,9 +176,11 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
       </div>
 
       <div className="composer-meta">
-        <p>{phase === "prechecking" ? "正在进行结构识别与规则检查…" : "按 Cmd/Ctrl + Enter 开始预检"}</p>
+        <div className="composer-hint-shell" aria-live="polite">
+          {hintText ? <p className="composer-hint">{hintText}</p> : <span className="composer-hint-placeholder" aria-hidden="true" />}
+        </div>
         {hasContent ? (
-          <button type="button" className="composer-clear" onClick={onClear}>
+          <button type="button" className="composer-clear" onClick={onClear} disabled={disabled}>
             清空
           </button>
         ) : (

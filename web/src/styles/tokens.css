@@ -7,7 +7,8 @@
     "Microsoft YaHei",
     system-ui,
     sans-serif;
-  --bg-page: #f6f9fc;
+  --bg-page: #f5f8fc;
+  --bg-page-deep: #edf3fa;
   --bg-panel: rgba(255, 255, 255, 0.92);
   --bg-panel-strong: #ffffff;
   --bg-panel-soft: #f2f7fd;
@@ -16,6 +17,7 @@
   --bg-warning: #fff8ec;
   --bg-ok: #f5fbff;
   --border-base: rgba(116, 140, 168, 0.22);
+  --border-drag: rgba(97, 160, 226, 0.5);
   --border-strong: rgba(102, 138, 180, 0.36);
   --border-accent: rgba(109, 177, 255, 0.55);
   --text-primary: #132033;
@@ -33,6 +35,7 @@
   --shadow-soft: 0 18px 48px rgba(161, 186, 214, 0.2);
   --shadow-panel: 0 24px 60px rgba(180, 201, 226, 0.18);
   --shadow-modal: 0 32px 80px rgba(106, 135, 168, 0.25);
+  --focus-ring: rgba(126, 195, 255, 0.22);
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 22px;

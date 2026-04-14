@@ -24,8 +24,8 @@ describe("App smoke", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "SC-TH" })).toBeInTheDocument();
     expect(screen.queryByText("极简论文预检与 Word 导出")).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText("上传 .docx 或粘贴论文内容")).toBeInTheDocument();
-    expect(screen.getByText("按 Cmd/Ctrl + Enter 开始预检")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("上传 .docx 或粘贴论文内容")).not.toBeInTheDocument();
+    expect(screen.queryByText("按 Cmd/Ctrl + Enter 开始预检")).not.toBeInTheDocument();
     const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(uploadButton.tagName).toBe("BUTTON");
@@ -66,6 +66,21 @@ describe("App smoke", () => {
     expect(await screen.findByText("paper.docx")).toBeInTheDocument();
   });
 
+  it("shows shortcut hint only when the composer has content", async () => {
+    mockFetch();
+
+    render(<App />);
+
+    const textarea = screen.getByLabelText("论文正文输入框");
+    expect(screen.queryByText("按 Cmd/Ctrl + Enter 开始预检")).not.toBeInTheDocument();
+
+    fireEvent.change(textarea, { target: { value: "这是正文内容" } });
+    expect(await screen.findByText("按 Cmd/Ctrl + Enter 开始预检")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清空" }));
+    await waitFor(() => expect(screen.queryByText("按 Cmd/Ctrl + Enter 开始预检")).not.toBeInTheDocument());
+  });
+
   it("shows an inline error after selecting an invalid file", async () => {
     mockFetch();
     const { container } = render(<App />);
@@ -91,6 +106,31 @@ describe("App smoke", () => {
 
     expect(clickSpy).not.toHaveBeenCalled();
     expect(await screen.findByText("请先清空当前输入，再切换输入方式。")).toBeInTheDocument();
+  });
+
+  it("shows drag-over feedback and accepts a dropped docx file", async () => {
+    mockFetch();
+
+    render(<App />);
+
+    const textarea = screen.getByLabelText("论文正文输入框");
+    const composer = textarea.closest(".composer") as HTMLElement;
+    const file = new File(["docx"], "drop.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    const dataTransfer = {
+      files: [file],
+      items: [],
+      types: ["Files"],
+      dropEffect: "copy",
+    };
+
+    fireEvent.dragEnter(composer, { dataTransfer });
+    expect(composer).toHaveAttribute("data-drag-active", "true");
+
+    fireEvent.drop(composer, { dataTransfer });
+    expect(composer).toHaveAttribute("data-drag-active", "false");
+    expect(await screen.findByText("drop.docx")).toBeInTheDocument();
   });
 
   it("allows uploading again after clearing the previous file", async () => {
