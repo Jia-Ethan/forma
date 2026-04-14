@@ -30,7 +30,7 @@ class BodySection(BaseModel):
     @field_validator("level")
     @classmethod
     def clamp_level(cls, value: int) -> int:
-        return min(max(value, 1), 3)
+        return min(max(value, 1), 4)
 
 
 class ReferenceSection(BaseModel):
@@ -48,9 +48,11 @@ class NormalizedThesis(BaseModel):
     abstract_cn: SummarySection = Field(default_factory=SummarySection)
     abstract_en: SummarySection = Field(default_factory=SummarySection)
     body_sections: list[BodySection] = Field(default_factory=list)
+    notes: str = ""
     references: ReferenceSection = Field(default_factory=ReferenceSection)
     acknowledgements: str = ""
     appendix: str = ""
+    source_features: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     parse_errors: list[str] = Field(default_factory=list)
     capabilities: CapabilityFlags = Field(default_factory=CapabilityFlags)

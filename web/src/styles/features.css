@@ -7,7 +7,7 @@
   color: var(--text-primary);
 }
 
-.composer-plus:hover:not(:disabled),
+.composer-plus:hover:not([aria-disabled="true"]),
 .composer-submit:hover:not(:disabled) {
   background: rgba(126, 195, 255, 0.3);
 }

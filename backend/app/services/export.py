@@ -1,24 +1,284 @@
 from __future__ import annotations
 
 import io
+import re
 from datetime import datetime
-from pathlib import Path
 
 from docx import Document
-from docx.enum.section import WD_SECTION
+from docx.enum.section import WD_ORIENT
+from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 
-from ..config import DEBUG_OUTPUTS_DIR, DEBUG_PERSIST_ARTIFACTS, TEMPLATE_DOCX_PATH, TEMPLATE_NAME
+from ..config import DEBUG_OUTPUTS_DIR, DEBUG_PERSIST_ARTIFACTS, TEMPLATE_DOCX_PATH
 from ..contracts import BodySection, NormalizedThesis
 from ..errors import AppError
 from .precheck import run_precheck
 
+A4_WIDTH_CM = 21
+A4_HEIGHT_CM = 29.7
+BODY_FONT_SIZE = 12
+SMALL_SECOND_FONT_SIZE = 18
+FOURTH_FONT_SIZE = 14
+FIFTH_FONT_SIZE = 10.5
+BODY_LINE_SPACING = 1.25
+BODY_FIRST_LINE_INDENT = Pt(24)
+
+STYLE_BASE_FONTS = {
+    "cn_heading": "黑体",
+    "cn_body": "宋体",
+    "latin": "Times New Roman",
+}
+
+STYLE_IDS = {name: f"SCTH{name}" for name in [
+    "ThesisTitle",
+    "ChineseAbstractHeading",
+    "ChineseAbstractBody",
+    "EnglishAbstractHeading",
+    "EnglishAbstractBody",
+    "KeywordsLabel",
+    "TOCHeading",
+    "Heading1",
+    "Heading2",
+    "Heading3",
+    "Heading4",
+    "BodyText",
+    "ReferenceHeading",
+    "ReferenceEntry",
+    "AppendixHeading",
+    "AppendixItemHeading",
+    "AcknowledgementHeading",
+    "NoteText",
+]}
+
+STYLE_SPECS = {
+    "ThesisTitle": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": 16,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "ChineseAbstractHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "ChineseAbstractBody": {
+        "font_east_asia": "宋体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "line_spacing": BODY_LINE_SPACING,
+        "first_line_indent": BODY_FIRST_LINE_INDENT,
+    },
+    "EnglishAbstractHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "EnglishAbstractBody": {
+        "font_east_asia": "Times New Roman",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "line_spacing": BODY_LINE_SPACING,
+        "first_line_indent": BODY_FIRST_LINE_INDENT,
+    },
+    "KeywordsLabel": {
+        "font_east_asia": "宋体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "line_spacing": BODY_LINE_SPACING,
+        "first_line_indent": BODY_FIRST_LINE_INDENT,
+    },
+    "TOCHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "Heading1": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": 14,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "line_spacing": BODY_LINE_SPACING,
+        "space_before": Pt(12),
+        "space_after": Pt(6),
+        "outline_level": 0,
+    },
+    "Heading2": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.LEFT,
+        "line_spacing": BODY_LINE_SPACING,
+        "space_before": Pt(6),
+        "space_after": Pt(3),
+        "outline_level": 1,
+    },
+    "Heading3": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.LEFT,
+        "line_spacing": BODY_LINE_SPACING,
+        "space_before": Pt(6),
+        "space_after": Pt(3),
+        "outline_level": 2,
+    },
+    "Heading4": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.LEFT,
+        "line_spacing": BODY_LINE_SPACING,
+        "space_before": Pt(6),
+        "space_after": Pt(3),
+        "outline_level": 3,
+    },
+    "BodyText": {
+        "font_east_asia": "宋体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "line_spacing": BODY_LINE_SPACING,
+        "first_line_indent": BODY_FIRST_LINE_INDENT,
+    },
+    "ReferenceHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "ReferenceEntry": {
+        "font_east_asia": "宋体",
+        "font_ascii": "Times New Roman",
+        "size": BODY_FONT_SIZE,
+        "line_spacing": BODY_LINE_SPACING,
+        "first_line_indent": BODY_FIRST_LINE_INDENT,
+    },
+    "AppendixHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "AppendixItemHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": FOURTH_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.LEFT,
+        "space_after": Pt(6),
+    },
+    "AcknowledgementHeading": {
+        "font_east_asia": "黑体",
+        "font_ascii": "Times New Roman",
+        "size": SMALL_SECOND_FONT_SIZE,
+        "bold": True,
+        "alignment": WD_ALIGN_PARAGRAPH.CENTER,
+        "space_after": Pt(12),
+    },
+    "NoteText": {
+        "font_east_asia": "宋体",
+        "font_ascii": "Times New Roman",
+        "size": 9,
+        "line_spacing": BODY_LINE_SPACING,
+    },
+}
+
+HEADER_SUBTITLE_SEPARATOR_PATTERNS = (
+    re.compile(r"^(?P<main>.+?)：\s*(?P<sub>.+)$"),
+    re.compile(r"^(?P<main>.+?):\s+(?P<sub>.+)$"),
+    re.compile(r"^(?P<main>.+?)(?:——|--)\s*(?P<sub>.+)$"),
+    re.compile(r"^(?P<main>.+?)\s+-\s+(?P<sub>.+)$"),
+    re.compile(r"^(?P<main>.+?)\s*\|\s*(?P<sub>.+)$"),
+)
+HEADER_PARENTHESES_SUBTITLE_PATTERN = re.compile(r"^(?P<main>.+?)[（(]\s*(?P<sub>[^()（）]{1,40})\s*[）)]$")
+
 
 def normalize_text_block(text: str) -> str:
     return "\n".join(line.rstrip() for line in (text or "").strip().splitlines()).strip()
+
+
+def primary_title_line(title: str) -> str:
+    normalized = normalize_text_block(title)
+    if not normalized:
+        return "论文题目待补充"
+    for line in normalized.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return "论文题目待补充"
+
+
+def has_title_letters(text: str) -> bool:
+    return bool(re.search(r"[A-Za-z\u4e00-\u9fff]", text or ""))
+
+
+def looks_like_version_or_year(text: str) -> bool:
+    candidate = (text or "").strip()
+    return bool(re.fullmatch(r"\d{2,4}(?:[./-]\d{1,2}){0,2}(?:版)?", candidate))
+
+
+def clean_header_main_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip()).rstrip("：:|-—– ")
+
+
+def can_strip_subtitle(main_title: str, subtitle: str) -> bool:
+    main = clean_header_main_text(main_title)
+    sub = re.sub(r"\s+", " ", (subtitle or "").strip())
+    if not main or not sub:
+        return False
+    if not has_title_letters(main) or not has_title_letters(sub):
+        return False
+    if len(sub) > 40:
+        return False
+    if re.fullmatch(r"[A-Z]{1,6}", sub):
+        return False
+    if looks_like_version_or_year(sub):
+        return False
+    return True
+
+
+def strip_subtitle_for_header(title: str) -> str:
+    line = primary_title_line(title)
+    for pattern in HEADER_SUBTITLE_SEPARATOR_PATTERNS:
+        match = pattern.match(line)
+        if not match:
+            continue
+        main = match.group("main")
+        subtitle = match.group("sub")
+        if can_strip_subtitle(main, subtitle):
+            return clean_header_main_text(main)
+
+    parenthetical = HEADER_PARENTHESES_SUBTITLE_PATTERN.match(line)
+    if parenthetical and can_strip_subtitle(parenthetical.group("main"), parenthetical.group("sub")):
+        return clean_header_main_text(parenthetical.group("main"))
+    return clean_header_main_text(line)
+
+
+def extract_header_title(title: str, *, max_length: int = 60) -> str:
+    clean = strip_subtitle_for_header(title) or "论文题目待补充"
+    return clean[:max_length]
 
 
 def persist_debug_copy(label: str, payload: bytes, suffix: str) -> None:
@@ -38,160 +298,307 @@ def clear_document(document: Document) -> None:
         body.remove(child)
 
 
-def set_style_font(style, name: str, size: int, *, bold: bool = False) -> None:
-    style.font.name = name
+def clear_block_container(container) -> None:
+    element = container._element
+    for child in list(element):
+        element.remove(child)
+
+
+def set_rfonts(target_element, *, east_asia: str, ascii_font: str) -> None:
+    rpr = target_element.get_or_add_rPr()
+    rfonts = rpr.rFonts
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        rpr.append(rfonts)
+    rfonts.set(qn("w:ascii"), ascii_font)
+    rfonts.set(qn("w:hAnsi"), ascii_font)
+    rfonts.set(qn("w:cs"), ascii_font)
+    rfonts.set(qn("w:eastAsia"), east_asia)
+
+
+def set_style_font(style, *, east_asia: str, ascii_font: str, size: float, bold: bool = False) -> None:
+    style.font.name = ascii_font
     style.font.size = Pt(size)
     style.font.bold = bold
-    rpr = style._element.get_or_add_rPr()
-    rfonts = rpr.rFonts
-    if rfonts is None:
-        rfonts = OxmlElement("w:rFonts")
-        rpr.append(rfonts)
-    rfonts.set(qn("w:ascii"), name)
-    rfonts.set(qn("w:hAnsi"), name)
-    rfonts.set(qn("w:eastAsia"), name)
+    set_rfonts(style._element, east_asia=east_asia, ascii_font=ascii_font)
 
 
-def set_run_font(run, name: str, size: int, *, bold: bool = False) -> None:
-    run.font.name = name
+def set_run_font(run, *, east_asia: str, ascii_font: str, size: float, bold: bool = False) -> None:
+    run.font.name = ascii_font
     run.font.size = Pt(size)
     run.bold = bold
-    rpr = run._element.get_or_add_rPr()
-    rfonts = rpr.rFonts
-    if rfonts is None:
-        rfonts = OxmlElement("w:rFonts")
-        rpr.append(rfonts)
-    rfonts.set(qn("w:ascii"), name)
-    rfonts.set(qn("w:hAnsi"), name)
-    rfonts.set(qn("w:eastAsia"), name)
+    set_rfonts(run._element, east_asia=east_asia, ascii_font=ascii_font)
 
 
-def configure_document(document: Document) -> None:
-    section = document.sections[0]
-    section.top_margin = Cm(2.8)
-    section.bottom_margin = Cm(2.6)
-    section.left_margin = Cm(3.0)
-    section.right_margin = Cm(2.6)
-    section.page_width = Cm(21)
-    section.page_height = Cm(29.7)
+def get_style_by_name(document: Document, name: str):
+    for style in document.styles:
+        if style.name == name:
+            return style
+    return None
 
+
+def ensure_style_name(style, name: str) -> None:
+    name_element = style._element.find(qn("w:name"))
+    if name_element is None:
+        name_element = OxmlElement("w:name")
+        style._element.insert(0, name_element)
+    name_element.set(qn("w:val"), name)
+
+
+def set_style_outline_level(style, level: int) -> None:
+    ppr = style._element.get_or_add_pPr()
+    for node in list(ppr):
+        if node.tag == qn("w:outlineLvl"):
+            ppr.remove(node)
+    outline = OxmlElement("w:outlineLvl")
+    outline.set(qn("w:val"), str(level))
+    ppr.append(outline)
+
+
+def ensure_paragraph_style(document: Document, name: str, *, base: str = "Normal", **spec) -> None:
     styles = document.styles
-    set_style_font(styles["Normal"], "宋体", 12)
-    set_style_font(styles["Title"], "黑体", 18, bold=True)
-    set_style_font(styles["Heading 1"], "黑体", 16, bold=True)
-    set_style_font(styles["Heading 2"], "黑体", 14, bold=True)
-    set_style_font(styles["Heading 3"], "黑体", 13, bold=True)
+    style = get_style_by_name(document, name)
+    if style is None:
+        style = styles.add_style(STYLE_IDS[name], WD_STYLE_TYPE.PARAGRAPH)
+        ensure_style_name(style, name)
 
-    normal = styles["Normal"].paragraph_format
-    normal.line_spacing = 1.5
-    normal.first_line_indent = Cm(0.74)
-    normal.space_after = Pt(0)
+    if base == "Normal":
+        style.base_style = styles["Normal"]
+    else:
+        base_style = get_style_by_name(document, base)
+        if base_style is not None:
+            style.base_style = base_style
+
+    set_style_font(
+        style,
+        east_asia=spec.get("font_east_asia", STYLE_BASE_FONTS["cn_body"]),
+        ascii_font=spec.get("font_ascii", STYLE_BASE_FONTS["latin"]),
+        size=spec.get("size", BODY_FONT_SIZE),
+        bold=spec.get("bold", False),
+    )
+
+    paragraph_format = style.paragraph_format
+    paragraph_format.alignment = spec.get("alignment")
+    paragraph_format.first_line_indent = spec.get("first_line_indent")
+    paragraph_format.left_indent = spec.get("left_indent")
+    paragraph_format.space_before = spec.get("space_before", Pt(0))
+    paragraph_format.space_after = spec.get("space_after", Pt(0))
+    paragraph_format.line_spacing = spec.get("line_spacing", BODY_LINE_SPACING)
+    paragraph_format.keep_with_next = spec.get("keep_with_next", False)
+
+    if "outline_level" in spec:
+        set_style_outline_level(style, spec["outline_level"])
 
 
-def add_centered_paragraph(document: Document, text: str, *, style: str | None = None, size: int | None = None) -> None:
-    paragraph = document.add_paragraph(style=style)
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = paragraph.add_run(text)
-    if size:
-        set_run_font(run, "黑体", size, bold=style == "Title")
+def ensure_styles(document: Document) -> None:
+    normal = document.styles["Normal"]
+    set_style_font(normal, east_asia="宋体", ascii_font="Times New Roman", size=BODY_FONT_SIZE)
+    normal_format = normal.paragraph_format
+    normal_format.line_spacing = BODY_LINE_SPACING
+    normal_format.first_line_indent = BODY_FIRST_LINE_INDENT
+    normal_format.space_after = Pt(0)
+    normal_format.space_before = Pt(0)
+
+    for style_name, spec in STYLE_SPECS.items():
+        ensure_paragraph_style(document, style_name, **spec)
+
+
+def configure_section_layout(section) -> None:
+    section.orientation = WD_ORIENT.PORTRAIT
+    section.page_width = Cm(A4_WIDTH_CM)
+    section.page_height = Cm(A4_HEIGHT_CM)
+    section.top_margin = Cm(2.5)
+    section.bottom_margin = Cm(2.5)
+    section.left_margin = Cm(2)
+    section.right_margin = Cm(2)
+    section.gutter = Cm(0.5)
+    section.header_distance = Cm(1.5)
+    section.footer_distance = Cm(1.5)
+
+
+def set_update_fields_on_open(document: Document) -> None:
+    settings = document.settings._element
+    node = settings.find(qn("w:updateFields"))
+    if node is None:
+        node = OxmlElement("w:updateFields")
+        settings.append(node)
+    node.set(qn("w:val"), "true")
+
+
+def add_field(run, instruction: str, placeholder: str | None = None) -> None:
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = instruction
+    fld_separate = OxmlElement("w:fldChar")
+    fld_separate.set(qn("w:fldCharType"), "separate")
+    run._r.extend([fld_begin, instr_text, fld_separate])
+    if placeholder:
+        text = OxmlElement("w:t")
+        text.text = placeholder
+        run._r.append(text)
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+    run._r.append(fld_end)
+
+
+def configure_header_footer(document: Document, title: str) -> None:
+    for section in document.sections:
+        section.header.is_linked_to_previous = False
+        section.footer.is_linked_to_previous = False
+
+        clear_block_container(section.header)
+        header_paragraph = section.header.add_paragraph()
+        header_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        header_run = header_paragraph.add_run(extract_header_title(title))
+        set_run_font(header_run, east_asia="宋体", ascii_font="Times New Roman", size=FIFTH_FONT_SIZE)
+
+        clear_block_container(section.footer)
+        footer_paragraph = section.footer.add_paragraph()
+        footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        footer_run = footer_paragraph.add_run()
+        set_run_font(footer_run, east_asia="黑体", ascii_font="Times New Roman", size=FIFTH_FONT_SIZE, bold=True)
+        add_field(footer_run, "PAGE")
+
+
+def configure_document(document: Document, title: str) -> None:
+    clear_document(document)
+    ensure_styles(document)
+    set_update_fields_on_open(document)
+    for section in document.sections:
+        configure_section_layout(section)
+    configure_header_footer(document, title)
 
 
 def add_page_break(document: Document) -> None:
     document.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
 
 
-def add_cover_page(document: Document, thesis: NormalizedThesis) -> None:
-    meta = thesis.metadata
-    add_centered_paragraph(document, "华南师范大学", style="Title")
-    add_centered_paragraph(document, "本科毕业论文", size=18)
-    document.add_paragraph()
-    add_centered_paragraph(document, meta.title.strip() or "待补充论文题目", size=20)
-    document.add_paragraph()
-
-    table = document.add_table(rows=7, cols=2)
-    table.style = "Table Grid"
-    rows = [
-        ("学生姓名", meta.author_name or "未填写"),
-        ("学号", meta.student_id or "未填写"),
-        ("学院", meta.department or "未填写"),
-        ("专业", meta.major or "未填写"),
-        ("班级", meta.class_name or "未填写"),
-        ("指导老师", meta.advisor_name or "未填写"),
-        ("提交日期", meta.submission_date or "未填写"),
-    ]
-    for row, values in zip(table.rows, rows):
-        row.cells[0].text = values[0]
-        row.cells[1].text = values[1]
-
-    add_page_break(document)
-
-
-def add_toc(document: Document) -> None:
-    heading = document.add_paragraph(style="Heading 1")
-    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    heading.add_run("目录")
-
-    paragraph = document.add_paragraph()
-    run = paragraph.add_run()
-    fld_begin = OxmlElement("w:fldChar")
-    fld_begin.set(qn("w:fldCharType"), "begin")
-    instr_text = OxmlElement("w:instrText")
-    instr_text.set(qn("xml:space"), "preserve")
-    instr_text.text = 'TOC \\o "1-3" \\h \\z \\u'
-    fld_separate = OxmlElement("w:fldChar")
-    fld_separate.set(qn("w:fldCharType"), "separate")
-    placeholder = OxmlElement("w:t")
-    placeholder.text = "请在 Word 中右键更新目录。"
-    fld_end = OxmlElement("w:fldChar")
-    fld_end.set(qn("w:fldCharType"), "end")
-    run._r.extend([fld_begin, instr_text, fld_separate, placeholder, fld_end])
-    add_page_break(document)
-
-
-def add_heading(document: Document, text: str, level: int = 1, *, center: bool = False) -> None:
-    paragraph = document.add_paragraph(style=f"Heading {min(max(level, 1), 3)}")
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.LEFT
+def add_heading_paragraph(document: Document, text: str, style_name: str) -> None:
+    paragraph = document.add_paragraph(style=get_style_by_name(document, style_name))
     paragraph.add_run(text)
 
 
-def add_paragraphs(document: Document, text: str) -> None:
+def add_body_paragraphs(document: Document, text: str, *, style_name: str) -> None:
     normalized = normalize_text_block(text)
     if not normalized:
         return
-    for chunk in [item.strip() for item in normalized.split("\n\n") if item.strip()]:
-        document.add_paragraph(chunk)
+    blocks = [item.strip() for item in re.split(r"\n\s*\n", normalized) if item.strip()]
+    for block in blocks:
+        paragraph = document.add_paragraph(style=get_style_by_name(document, style_name))
+        paragraph.add_run(block)
 
 
-def add_summary_section(document: Document, heading: str, content: str, keywords_label: str, keywords: list[str]) -> None:
-    add_heading(document, heading, 1, center=True)
-    add_paragraphs(document, content)
-    if keywords:
-        paragraph = document.add_paragraph()
-        paragraph.paragraph_format.first_line_indent = Cm(0)
-        paragraph.add_run(f"{keywords_label}：").bold = True
-        paragraph.add_run("；".join(keywords))
-    add_page_break(document)
+def add_keywords(document: Document, keywords: list[str], *, english: bool) -> None:
+    if not keywords:
+        return
+    paragraph = document.add_paragraph(style=get_style_by_name(document, "KeywordsLabel"))
+    label = "Keywords" if english else "关键词"
+    separator = ", " if english else "，"
+    label_run = paragraph.add_run(f"{label}: ")
+    if english:
+        set_run_font(label_run, east_asia="Times New Roman", ascii_font="Times New Roman", size=BODY_FONT_SIZE, bold=True)
+    else:
+        set_run_font(label_run, east_asia="宋体", ascii_font="Times New Roman", size=BODY_FONT_SIZE, bold=True)
+
+    content_run = paragraph.add_run(separator.join(item.strip() for item in keywords if item.strip()))
+    if english:
+        set_run_font(content_run, east_asia="Times New Roman", ascii_font="Times New Roman", size=BODY_FONT_SIZE)
+    else:
+        set_run_font(content_run, east_asia="宋体", ascii_font="Times New Roman", size=BODY_FONT_SIZE)
 
 
-def add_body_section(document: Document, section: BodySection) -> None:
-    add_heading(document, section.title.strip() or "正文", section.level)
-    add_paragraphs(document, section.content)
+def add_abstract_page(document: Document, thesis: NormalizedThesis, *, english: bool) -> None:
+    if english:
+        add_heading_paragraph(document, "Abstract", "EnglishAbstractHeading")
+        add_body_paragraphs(document, thesis.abstract_en.content, style_name="EnglishAbstractBody")
+        add_keywords(document, thesis.abstract_en.keywords, english=True)
+        return
+
+    title = thesis.metadata.title.strip() or "论文题目待补充"
+    add_heading_paragraph(document, title, "ThesisTitle")
+    add_heading_paragraph(document, "中文摘要", "ChineseAbstractHeading")
+    add_body_paragraphs(document, thesis.abstract_cn.content, style_name="ChineseAbstractBody")
+    add_keywords(document, thesis.abstract_cn.keywords, english=False)
+
+
+def add_toc(document: Document) -> None:
+    add_heading_paragraph(document, "目录", "TOCHeading")
+    paragraph = document.add_paragraph(style=get_style_by_name(document, "BodyText"))
+    run = paragraph.add_run()
+    add_field(run, 'TOC \\o "1-4" \\h \\z \\u', placeholder="请在 Word 中更新目录字段。")
+
+
+def section_number(section: BodySection, counters: list[int]) -> str:
+    level = min(max(section.level, 1), 4)
+    for index in range(level - 1):
+        if counters[index] == 0:
+            counters[index] = 1
+    counters[level - 1] += 1
+    for index in range(level, 4):
+        counters[index] = 0
+    return ".".join(str(counters[index]) for index in range(level)) + "."
+
+
+def add_body(document: Document, body_sections: list[BodySection]) -> None:
+    counters = [0, 0, 0, 0]
+    for section in body_sections:
+        level = min(max(section.level, 1), 4)
+        prefix = section_number(section, counters)
+        heading_text = f"{prefix} {section.title.strip() or '正文'}"
+        add_heading_paragraph(document, heading_text, f"Heading{level}")
+        add_body_paragraphs(document, section.content, style_name="BodyText")
+
+
+def add_notes(document: Document, text: str) -> None:
+    normalized = normalize_text_block(text)
+    if not normalized:
+        return
+    add_heading_paragraph(document, "注释", "ReferenceHeading")
+    add_body_paragraphs(document, normalized, style_name="NoteText")
 
 
 def add_references(document: Document, items: list[str]) -> None:
-    add_heading(document, "参考文献", 1)
-    for index, item in enumerate(items, start=1):
-        paragraph = document.add_paragraph()
-        paragraph.paragraph_format.first_line_indent = Cm(0)
-        paragraph.add_run(f"[{index}] {item}")
+    add_heading_paragraph(document, "参考文献", "ReferenceHeading")
+    for item in [entry.strip() for entry in items if entry.strip()]:
+        paragraph = document.add_paragraph(style=get_style_by_name(document, "ReferenceEntry"))
+        paragraph.add_run(item)
 
 
-def add_simple_section(document: Document, heading: str, text: str) -> None:
-    if not normalize_text_block(text):
+def looks_like_appendix_item_heading(line: str) -> bool:
+    text = line.strip()
+    if not text or len(text) > 40:
+        return False
+    return bool(re.match(r"^(附录\s*[A-Z0-9一二三四五六七八九十]+|[A-Z0-9一二三四五六七八九十]+[、.]\s*.+)$", text))
+
+
+def add_appendix(document: Document, text: str) -> None:
+    normalized = normalize_text_block(text)
+    if not normalized:
         return
-    add_page_break(document)
-    add_heading(document, heading, 1)
-    add_paragraphs(document, text)
+    add_heading_paragraph(document, "附录", "AppendixHeading")
+    blocks = [item.strip() for item in re.split(r"\n\s*\n", normalized) if item.strip()]
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+        if looks_like_appendix_item_heading(lines[0]):
+            heading = document.add_paragraph(style=get_style_by_name(document, "AppendixItemHeading"))
+            heading.add_run(lines[0])
+            remainder = "\n".join(lines[1:]).strip()
+            if remainder:
+                add_body_paragraphs(document, remainder, style_name="BodyText")
+            continue
+        add_body_paragraphs(document, block, style_name="BodyText")
+
+
+def add_acknowledgements(document: Document, text: str) -> None:
+    normalized = normalize_text_block(text)
+    if not normalized:
+        return
+    add_heading_paragraph(document, "致谢", "AcknowledgementHeading")
+    add_body_paragraphs(document, normalized, style_name="BodyText")
 
 
 def load_template_document() -> Document:
@@ -203,7 +610,7 @@ def load_template_document() -> Document:
             status_code=500,
         )
     try:
-        document = Document(TEMPLATE_DOCX_PATH)
+        return Document(TEMPLATE_DOCX_PATH)
     except Exception as exc:  # pragma: no cover
         raise AppError(
             "TEMPLATE_DEPENDENCY_MISSING",
@@ -211,10 +618,6 @@ def load_template_document() -> Document:
             details={"template": str(TEMPLATE_DOCX_PATH), "reason": str(exc)},
             status_code=500,
         ) from exc
-
-    clear_document(document)
-    configure_document(document)
-    return document
 
 
 def validate_for_export(thesis: NormalizedThesis) -> None:
@@ -236,31 +639,42 @@ def export_docx(thesis: NormalizedThesis) -> bytes:
 
     try:
         document = load_template_document()
-        add_cover_page(document, thesis)
+        configure_document(document, thesis.metadata.title.strip())
+
+        add_abstract_page(document, thesis, english=False)
+        add_page_break(document)
+        add_abstract_page(document, thesis, english=True)
+        add_page_break(document)
         add_toc(document)
-        add_summary_section(document, "摘要", thesis.abstract_cn.content, "关键词", thesis.abstract_cn.keywords)
+        add_page_break(document)
+        add_body(document, thesis.body_sections)
 
-        if normalize_text_block(thesis.abstract_en.content):
-            add_summary_section(document, "Abstract", thesis.abstract_en.content, "Keywords", thesis.abstract_en.keywords)
-
-        for index, section in enumerate(thesis.body_sections):
-            if index == 0:
-                add_heading(document, section.title.strip() or "正文", section.level)
-                add_paragraphs(document, section.content)
-            else:
-                add_body_section(document, section)
+        if normalize_text_block(thesis.notes):
+            add_page_break(document)
+            add_notes(document, thesis.notes)
 
         add_page_break(document)
         add_references(document, thesis.references.items)
-        add_simple_section(document, "致谢", thesis.acknowledgements)
-        add_simple_section(document, "附录", thesis.appendix)
+
+        if normalize_text_block(thesis.appendix):
+            add_page_break(document)
+            add_appendix(document, thesis.appendix)
+
+        if normalize_text_block(thesis.acknowledgements):
+            add_page_break(document)
+            add_acknowledgements(document, thesis.acknowledgements)
 
         buffer = io.BytesIO()
         document.save(buffer)
         payload = buffer.getvalue()
-        persist_debug_copy("word-thesis", payload, "docx")
+        persist_debug_copy("export-docx", payload, "docx")
         return payload
     except AppError:
         raise
     except Exception as exc:  # pragma: no cover
-        raise AppError("EXPORT_FAILED", "导出 Word 文件失败，请稍后重试。", details={"reason": str(exc)}, status_code=500) from exc
+        raise AppError(
+            "EXPORT_FAILED",
+            "Word 文件生成失败，请稍后重试。",
+            details={"reason": str(exc)},
+            status_code=500,
+        ) from exc

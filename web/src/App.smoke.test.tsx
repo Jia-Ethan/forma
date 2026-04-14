@@ -20,14 +20,19 @@ describe("App smoke", () => {
   it("renders the minimal home shell", async () => {
     mockFetch();
 
-    render(<App />);
+    const { container } = render(<App />);
 
     expect(screen.getByRole("heading", { level: 1, name: "SC-TH" })).toBeInTheDocument();
     expect(screen.queryByText("极简论文预检与 Word 导出")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("上传 .docx 或粘贴论文内容")).toBeInTheDocument();
     expect(screen.getByText("按 Cmd/Ctrl + Enter 开始预检")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "上传 .docx 文件" })).toBeInTheDocument();
+    const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(uploadButton.tagName).toBe("BUTTON");
+    expect(uploadButton).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始预检" })).toBeInTheDocument();
+    expect(input.tabIndex).toBe(-1);
+    expect(input).toHaveAttribute("aria-hidden", "true");
 
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/health", undefined));
   });
@@ -41,6 +46,74 @@ describe("App smoke", () => {
 
     expect(await screen.findByText("内容为空，无法开始处理。")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the selected docx filename after upload", async () => {
+    mockFetch();
+    const { container } = render(<App />);
+
+    const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+    const file = new File(["docx"], "paper.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    fireEvent.click(uploadButton);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText("paper.docx")).toBeInTheDocument();
+  });
+
+  it("shows an inline error after selecting an invalid file", async () => {
+    mockFetch();
+    const { container } = render(<App />);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["bad"], "paper.pdf", { type: "application/pdf" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText("当前仅支持上传 `.docx` 文件。")).toBeInTheDocument();
+  });
+
+  it("shows source conflict when clicking upload after typing text", async () => {
+    mockFetch();
+    const { container } = render(<App />);
+    fireEvent.change(screen.getByLabelText("论文正文输入框"), {
+      target: { value: "已有内容" },
+    });
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+    fireEvent.click(screen.getByRole("button", { name: "上传 .docx 文件" }));
+
+    expect(clickSpy).not.toHaveBeenCalled();
+    expect(await screen.findByText("请先清空当前输入，再切换输入方式。")).toBeInTheDocument();
+  });
+
+  it("allows uploading again after clearing the previous file", async () => {
+    mockFetch();
+    const { container } = render(<App />);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const firstFile = new File(["docx"], "paper.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    fireEvent.change(input, { target: { files: [firstFile] } });
+    expect(await screen.findByText("paper.docx")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清空" }));
+    await waitFor(() => expect(screen.queryByText("paper.docx")).not.toBeInTheDocument());
+
+    const secondFile = new File(["docx"], "paper.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    fireEvent.change(input, { target: { files: [secondFile] } });
+
+    expect(await screen.findByText("paper.docx")).toBeInTheDocument();
   });
 
   it("opens preview modal after text precheck succeeds", async () => {
@@ -58,7 +131,7 @@ describe("App smoke", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
 
     expect(await screen.findByRole("dialog", { name: "导出前结构预检" })).toBeInTheDocument();
-    expect(screen.getByText("预检已通过，可以开始导出 Word 文件。")).toBeInTheDocument();
+    expect(screen.getByText("当前未发现阻塞项，可以继续导出正文审查稿。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认并导出" })).toBeEnabled();
   });
 

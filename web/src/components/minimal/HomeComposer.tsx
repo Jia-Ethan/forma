@@ -8,14 +8,15 @@ type HomeComposerProps = {
   phase: FlowPhase;
   exportProgress: number;
   onTextChange: (value: string) => void;
+  onUploadTrigger: () => boolean;
   onFileSelect: (file: File | null) => void;
   onSubmit: () => void;
   onClear: () => void;
 };
 
-export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onTextChange, onFileSelect, onSubmit, onClear }: HomeComposerProps) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onTextChange, onUploadTrigger, onFileSelect, onSubmit, onClear }: HomeComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasContent = Boolean(selectedFile || rawText.trim());
   const disabled = phase === "prechecking" || phase === "exporting";
 
@@ -58,17 +59,30 @@ export function HomeComposer({ rawText, selectedFile, phase, exportProgress, onT
           type="button"
           className="composer-plus"
           aria-label="上传 .docx 文件"
-          onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
+          onClick={() => {
+            if (!onUploadTrigger()) return;
+            fileInputRef.current?.click();
+          }}
         >
           +
         </button>
         <input
           ref={fileInputRef}
-          className="composer-file-input"
+          className="composer-file-input visually-hidden-input"
           type="file"
           accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={disabled}
+          onFocus={(event) => {
+            event.currentTarget.blur();
+          }}
+          onChange={(event) => {
+            const input = event.currentTarget;
+            onFileSelect(input.files?.[0] ?? null);
+            input.value = "";
+          }}
         />
 
         {phase === "exporting" ? (

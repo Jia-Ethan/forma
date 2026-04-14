@@ -39,9 +39,11 @@ export interface NormalizedThesis {
   abstract_cn: SummarySection;
   abstract_en: SummarySection;
   body_sections: BodySection[];
+  notes: string;
   references: ReferenceSection;
   acknowledgements: string;
   appendix: string;
+  source_features: string[];
   warnings: string[];
   parse_errors: string[];
   capabilities: CapabilityFlags;

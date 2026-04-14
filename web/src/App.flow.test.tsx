@@ -8,6 +8,14 @@ function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Pr
   return fetchMock;
 }
 
+function deferredResponse() {
+  let resolve!: (value: Response) => void;
+  const promise = new Promise<Response>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
 describe("App business flow", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -109,5 +117,72 @@ describe("App business flow", () => {
     const [, request] = exportCall as [RequestInfo | URL, RequestInit];
     const payload = JSON.parse(String(request.body));
     expect(payload.metadata.title).toBe("结构化映射示例论文");
+  });
+
+  it("keeps upload disabled while precheck is in flight", async () => {
+    const precheckDeferred = deferredResponse();
+    mockFetch((input) => {
+      const url = String(input);
+      if (url.includes("/api/precheck/text")) {
+        return precheckDeferred.promise;
+      }
+      return jsonResponse(healthPayload);
+    });
+
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByLabelText("论文正文输入框"), {
+      target: { value: "结构化映射示例论文\n\n摘要\n这是满足长度要求的摘要内容。".repeat(8) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
+
+    const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    await waitFor(() => expect(uploadButton).toBeDisabled());
+    fireEvent.click(uploadButton);
+    expect(clickSpy).not.toHaveBeenCalled();
+
+    precheckDeferred.resolve(await jsonResponse(samplePrecheck()));
+    expect(await screen.findByRole("dialog", { name: "导出前结构预检" })).toBeInTheDocument();
+  });
+
+  it("keeps upload disabled while export is in flight", async () => {
+    const exportDeferred = deferredResponse();
+    mockFetch((input) => {
+      const url = String(input);
+      if (url.includes("/api/precheck/text")) {
+        return jsonResponse(samplePrecheck({ thesis: sampleThesis() }));
+      }
+      if (url.includes("/api/export/docx")) {
+        return exportDeferred.promise;
+      }
+      return jsonResponse(healthPayload);
+    });
+
+    Object.defineProperty(URL, "createObjectURL", { value: vi.fn(() => "blob:docx"), configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: vi.fn(), configurable: true });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    const { container } = render(<App />);
+    fireEvent.change(screen.getByLabelText("论文正文输入框"), {
+      target: { value: "结构化映射示例论文\n\n摘要\n这是满足长度要求的摘要内容。".repeat(8) },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
+    await screen.findByRole("dialog", { name: "导出前结构预检" });
+    fireEvent.click(screen.getByRole("button", { name: "确认并导出" }));
+
+    const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    await waitFor(() => expect(uploadButton).toBeDisabled());
+    expect(await screen.findByText("正在生成 Word 文件")).toBeInTheDocument();
+    fireEvent.click(uploadButton);
+    expect(clickSpy).not.toHaveBeenCalled();
+
+    exportDeferred.resolve(await jsonResponse({}));
+    await waitFor(() => expect(screen.getByLabelText("论文正文输入框")).toHaveValue(""));
   });
 });

@@ -63,7 +63,20 @@ export function useMinimalExportFlow() {
     if (previewModalOpen) setPreviewModalOpen(false);
   }
 
+  function handleUploadTrigger() {
+    if (busy || exporting) return false;
+    if (rawText.trim()) {
+      setInlineError({ message: "请先清空当前输入，再切换输入方式。", code: "SOURCE_CONFLICT" });
+      return false;
+    }
+    setInlineError(null);
+    return true;
+  }
+
   function handleFileSelect(file: File | null) {
+    if (busy || exporting) {
+      return;
+    }
     if (rawText.trim()) {
       setInlineError({ message: "请先清空当前输入，再切换输入方式。", code: "SOURCE_CONFLICT" });
       return;
@@ -151,6 +164,7 @@ export function useMinimalExportFlow() {
     inlineError,
     clearAll,
     handleFileSelect,
+    handleUploadTrigger,
     handleTextChange,
     handlePrecheck,
     handleCancelPreview,

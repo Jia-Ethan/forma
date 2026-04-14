@@ -14,6 +14,7 @@ export function AppShell() {
         exportProgress={flow.exportProgress}
         error={flow.inlineError}
         onTextChange={flow.handleTextChange}
+        onUploadTrigger={flow.handleUploadTrigger}
         onFileSelect={flow.handleFileSelect}
         onSubmit={flow.handlePrecheck}
         onClear={flow.clearAll}
