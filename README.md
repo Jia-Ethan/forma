@@ -1,6 +1,6 @@
 # SC-TH
 
-面向华南师范大学本科毕业论文导出场景的规范驱动 Word 导出工具。
+面向华南师范大学本科毕业论文的规范驱动 Word 导出工具与 Agent Workbench 骨架。
 
 **当前主线：**
 1. **快速导出入口** — 上传 `.docx` 或粘贴论文文本，生成按华师规范组织的 Word 文档
@@ -63,6 +63,12 @@ flowchart LR
 ## 当前已支持
 
 - `.docx` 上传与纯文本输入共用同一套中间结构解析链路
+- Workbench 项目空间：项目、文件、版本、导出记录、Issue Ledger、Proposal 队列
+- `NormalizedThesis v2`：稳定 block id、source spans、provenance、confidence、comments、format risks
+- Agent 事件骨架：解析任务、事件流、规则建议、用户确认 / 拒绝 / 暂存
+- 多输入解析 registry：`.docx`、文本、PDF 本地粗解析、图片/OCR 占位、参考文献文件
+- 导出 registry：`.docx`、Markdown、自检报告、PDF 降级占位
+- Provider 配置骨架：OpenAI、Gemini、DeepSeek、MiniMax、Ollama 元数据与 SSRF 防护
 - 规范驱动的正式封面渲染
 - 中文摘要 / 英文摘要 / 目录 / 正文 / 参考文献 / 附录 / 致谢固定生成
 - Word TOC 字段、页眉、页脚、页码与分节控制
@@ -76,12 +82,15 @@ flowchart LR
 - 表格、图片、脚注、复杂浮动对象不作为阻塞项，但默认进入人工复核范围
 - 参考文献只做有限格式整理，不补造作者、刊名、卷期等缺失元数据
 - 当前只覆盖本科论文导出主线，不提供研究生模板入口
+- Workbench v1 当前是可运行 MVP 骨架，真实 OCR、Celery 队列、MinIO/S3 SDK 与真实 LLM 调用仍需后续接入
+- PDF 导出当前保留 `.docx` 结果并记录转换降级，不承诺 PDF 高保真
 
 ## 在线预览
 
 - Production: https://scnu-thesis-portal.vercel.app
 - 当前模板：`sc-th-word`
-- 当前主产物：`.docx`
+- 快速入口主产物：`.docx`
+- Workbench 本地入口：`http://127.0.0.1:5173/#/workbench`
 
 ![SC-TH 首页输入条](docs/assets/sc-th-home.png)
 
@@ -117,6 +126,18 @@ uv run uvicorn backend.story2paper.main_s2p:app --reload --port 8001
 npm run dev --prefix web
 ```
 
+若前后端分开运行，建议显式指定 API：
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev --prefix web
+```
+
+启动自托管 Workbench 依赖：
+
+```bash
+docker compose up --build
+```
+
 本地构建：
 
 ```bash
@@ -135,6 +156,7 @@ python3 scripts/build_web_public.py
 ## 关键文档
 
 - [主线说明](docs/product-mainline-word-v1.md)
+- [Workbench v1 说明](docs/workbench-v1.md)
 - [规范映射表](docs/scnu-undergraduate-format-spec-map.md)
 - [合规清单](docs/quality-checklist-compliance.md)
 - [已知限制](docs/known-limitations-word-export.md)
@@ -144,9 +166,9 @@ python3 scripts/build_web_public.py
 
 ## 仓库结构
 
-- `backend/app/`：统一解析、预检、Word 渲染与 API
-- `backend/story2paper/`：AI 多 Agent 论文生成流水线（agents / pipeline / exporters / shared）
-- `web/`：极简输入页、预检弹窗与导出流程
+- `backend/app/`：统一解析、预检、Word 渲染、Workbench API、数据层与导出 registry
+- `backend/story2paper/`：实验性多 Agent 研究代码，不进入默认论文导出主线
+- `web/`：极简输入页、预检弹窗、导出流程与 Workbench UI
 - `templates/working/sc-th-word/`：当前工作模板与正式封面资产
 - `scripts/check_docx_compliance.py`：主线 `.docx` 合规检查脚本
 - `docs/`：规范映射、审计、验收与限制说明
