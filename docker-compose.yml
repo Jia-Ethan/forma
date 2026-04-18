@@ -35,6 +35,8 @@ services:
       APP_ENV: production
       SCNU_DATABASE_URL: postgresql+psycopg://scnu:scnu-local@postgres:5432/scnu_thesis
       SCNU_STORAGE_DIR: /data/storage
+      SCNU_ACCESS_CODE: ${SCNU_ACCESS_CODE:-}
+      SCNU_SECRET_KEY: ${SCNU_SECRET_KEY:-}
       CORS_ALLOWED_ORIGINS: http://localhost:5173
     volumes:
       - app-storage:/data/storage
@@ -54,6 +56,8 @@ services:
       APP_ENV: production
       SCNU_DATABASE_URL: postgresql+psycopg://scnu:scnu-local@postgres:5432/scnu_thesis
       SCNU_STORAGE_DIR: /data/storage
+      SCNU_ACCESS_CODE: ${SCNU_ACCESS_CODE:-}
+      SCNU_SECRET_KEY: ${SCNU_SECRET_KEY:-}
     volumes:
       - app-storage:/data/storage
     depends_on:

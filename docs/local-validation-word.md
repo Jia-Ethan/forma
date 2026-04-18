@@ -6,7 +6,7 @@
 2. 检查上传 `.docx` 与粘贴文本入口都可用
 3. 触发预检，确认弹窗展示“缺失章节留白”和“复杂元素需人工复核”
 4. 通过预检后导出 `.docx`
-5. 运行 `python3 scripts/check_docx_compliance.py <导出文件>`
+5. 运行 `uv run python scripts/check_docx_compliance.py <导出文件>`
 6. 用 Word 打开并更新目录
 
 ## 重点抽查

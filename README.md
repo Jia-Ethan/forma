@@ -2,6 +2,10 @@
 
 面向华南师范大学本科毕业论文的规范驱动 Word 导出工具与 Agent Workbench 骨架。
 
+![CI](https://img.shields.io/badge/CI-pytest%20%2B%20vitest%20%2B%20build-blue)
+![Template](https://img.shields.io/badge/template-SCNU%20undergraduate-green)
+![Privacy](https://img.shields.io/badge/privacy-local%20first-6b7280)
+
 **当前主线：**
 1. **快速导出入口** — 上传 `.docx` 或粘贴论文文本，生成按华师规范组织的 Word 文档
 2. **Workbench v1 骨架** — 项目空间、文件库、版本、导出记录、Issue Ledger、Proposal 队列和可追溯 Agent 事件
@@ -68,7 +72,8 @@ flowchart LR
 - Agent 事件骨架：解析任务、事件流、规则建议、用户确认 / 拒绝 / 暂存
 - 多输入解析 registry：`.docx`、文本、PDF 本地粗解析、图片/OCR 占位、参考文献文件
 - 导出 registry：`.docx`、Markdown、自检报告、PDF 降级占位
-- Provider 配置骨架：OpenAI、Gemini、DeepSeek、MiniMax、Ollama 元数据与 SSRF 防护
+- Provider 设置：OpenAI、Gemini、DeepSeek、MiniMax、Ollama 元数据、服务端密钥保存、验证状态与 SSRF 防护
+- 项目创建向导、项目设置、隐私模式提示、远程 Provider 授权与访问码保护
 - 规范驱动的正式封面渲染
 - 中文摘要 / 英文摘要 / 目录 / 正文 / 参考文献 / 附录 / 致谢固定生成
 - Word TOC 字段、页眉、页脚、页码与分节控制
@@ -82,7 +87,7 @@ flowchart LR
 - 表格、图片、脚注、复杂浮动对象不作为阻塞项，但默认进入人工复核范围
 - 参考文献只做有限格式整理，不补造作者、刊名、卷期等缺失元数据
 - 当前只覆盖本科论文导出主线，不提供研究生模板入口
-- Workbench v1 当前是可运行 MVP 骨架，真实 OCR、Celery 队列、MinIO/S3 SDK 与真实 LLM 调用仍需后续接入
+- Workbench v1 当前是可运行 MVP 骨架，真实 OCR、Celery 队列、MinIO/S3 SDK、真实 LLM 调用与 Director Runtime 仍需后续接入
 - PDF 导出当前保留 `.docx` 结果并记录转换降级，不承诺 PDF 高保真
 
 ## 在线预览
@@ -138,11 +143,13 @@ VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev --prefix web
 docker compose up --build
 ```
 
+私有部署可复制 `.env.example`，设置 `SCNU_ACCESS_CODE` 保护 API，并设置 `SCNU_SECRET_KEY` 用于服务端封存 Provider API key。
+
 本地构建：
 
 ```bash
-python3 scripts/generate_frontend_types.py
-python3 scripts/build_web_public.py
+uv run python scripts/generate_frontend_types.py
+uv run python scripts/build_web_public.py
 ```
 
 ## 质量护栏
@@ -150,19 +157,24 @@ python3 scripts/build_web_public.py
 - `uv run pytest tests -q`
 - `npm run test:smoke --prefix web`
 - `npm run build --prefix web`
-- `python3 scripts/build_web_public.py`
-- `python3 scripts/check_docx_compliance.py <docx-path>`
+- `uv run python scripts/build_web_public.py`
+- `uv run python scripts/export_compliance_fixture.py tmp/fixture-export.docx`
+- `uv run python scripts/check_docx_compliance.py tmp/fixture-export.docx`
 
 ## 关键文档
 
 - [主线说明](docs/product-mainline-word-v1.md)
 - [Workbench v1 说明](docs/workbench-v1.md)
+- [API 说明](docs/api.md)
 - [规范映射表](docs/scnu-undergraduate-format-spec-map.md)
 - [合规清单](docs/quality-checklist-compliance.md)
 - [已知限制](docs/known-limitations-word-export.md)
 - [审计报告](docs/compliance/scnu-undergraduate-export-audit-report-v1.md)
 - [实施与验收记录](docs/compliance/scnu-undergraduate-export-implementation-record-v1.md)
 - [本地运行说明](README-local.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## 仓库结构
 

@@ -30,8 +30,9 @@
 - `uv run pytest tests -q`
 - `npm run test:smoke --prefix web`
 - `npm run build --prefix web`
-- `python3 scripts/build_web_public.py`
-- `python3 scripts/check_docx_compliance.py <docx-path>`
+- `uv run python scripts/build_web_public.py`
+- `uv run python scripts/export_compliance_fixture.py tmp/fixture-export.docx`
+- `uv run python scripts/check_docx_compliance.py tmp/fixture-export.docx`
 
 ## 人工复核
 

@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a focused SC-TH improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user workflow should this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful version.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      options:
+        - label: This does not require fabricating data, references, comments, or school rules.
+        - label: This keeps AI-generated正文 behind Proposal / Approval.
+        - label: This describes any privacy or remote Provider impact.

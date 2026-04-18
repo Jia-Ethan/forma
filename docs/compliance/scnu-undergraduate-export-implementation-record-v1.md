@@ -29,7 +29,7 @@
   - `uv run pytest tests -q` 通过
   - `npm run test:smoke --prefix web` 通过
   - `npm run build --prefix web` 通过
-  - `python3 scripts/build_web_public.py` 通过
+  - `uv run python scripts/build_web_public.py` 通过
 - 合规脚本：
   - `sample-export.docx`：`PASS`
   - `missing-export.docx`：`PASS`

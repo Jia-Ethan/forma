@@ -8,7 +8,7 @@
 
 Workbench v1 本地骨架为：
 
-`创建项目 → 上传材料 → 解析任务 → baseline version → Issue / Proposal → 用户确认 → 导出记录`
+`项目向导 → 隐私模式 → 上传材料 → 解析任务 → baseline version → Issue / Proposal → 用户确认 → 导出记录`
 
 ## 依赖
 
@@ -69,13 +69,13 @@ docker compose up --build
 生成前端类型：
 
 ```bash
-python3 scripts/generate_frontend_types.py
+uv run python scripts/generate_frontend_types.py
 ```
 
 构建前端并写入 `public/`：
 
 ```bash
-python3 scripts/build_web_public.py
+uv run python scripts/build_web_public.py
 ```
 
 ## 本地验收
@@ -87,11 +87,19 @@ python3 scripts/build_web_public.py
 3. 检查预检弹窗是否显示“缺失章节保留留白位”和“复杂元素需人工复核”
 4. 检查正式封面已作为主线输出的一部分
 5. 通过预检后导出 `.docx`
-6. 运行 `python3 scripts/check_docx_compliance.py <导出文件>`
+6. 运行 `uv run python scripts/check_docx_compliance.py <导出文件>`
 7. 在 Word 中更新目录并抽查页眉页脚、页码和分页
 8. 进入 `#/workbench` 新建项目
 9. 上传 `.docx` 或文本文件并触发解析
 10. 检查版本、Agent 事件、Proposal 队列与导出历史
 11. 检查 Provider 配置不会向前端返回 API key，内网 base URL 默认被拦截
+12. 如需访问码保护，设置 `SCNU_ACCESS_CODE` 并确认未验证请求会返回 `ACCESS_CODE_REQUIRED`
+
+CI 使用的导出合规 fixture 可本地生成：
+
+```bash
+uv run python scripts/export_compliance_fixture.py tmp/fixture-export.docx
+uv run python scripts/check_docx_compliance.py tmp/fixture-export.docx
+```
 
 更细的人工验收项见 `docs/local-validation-word.md`。

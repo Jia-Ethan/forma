@@ -173,10 +173,34 @@ export function precheckFromStory2Paper(schemaData: object, cover: import("../ge
 export interface ThesisProject {
   id: string;
   title: string;
+  school: string;
+  degree_level: string;
+  template_profile: string;
+  rule_set_id: string;
+  department: string;
+  major: string;
+  advisor: string;
+  student_name: string;
+  student_id: string;
+  writing_stage: string;
+  privacy_mode: string;
+  remote_provider_allowed: boolean;
   status: string;
   current_version_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectDraft {
+  title: string;
+  department?: string;
+  major?: string;
+  advisor?: string;
+  student_name?: string;
+  student_id?: string;
+  writing_stage?: string;
+  privacy_mode?: string;
+  remote_provider_allowed?: boolean;
 }
 
 export interface ProjectFileRecord {
@@ -240,16 +264,45 @@ export interface ExportRecord {
   created_at: string;
 }
 
-export function createProject(title: string) {
+export interface ProviderOption {
+  id: string;
+  name: string;
+  remote: boolean;
+}
+
+export interface ProviderConfigRecord {
+  id: string;
+  provider: string;
+  model: string;
+  base_url: string | null;
+  allow_local: boolean;
+  has_api_key: boolean;
+  verification_status: string;
+  verification_message: string;
+  last_verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function createProject(input: string | ProjectDraft) {
+  const payload = typeof input === "string" ? { title: input } : input;
   return jsonRequest<ThesisProject>("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify(payload),
   });
 }
 
 export function listProjects() {
   return jsonRequest<ThesisProject[]>("/api/projects");
+}
+
+export function updateProject(projectId: string, patch: Partial<ProjectDraft>) {
+  return jsonRequest<ThesisProject>(`/api/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
 }
 
 export function uploadProjectFile(projectId: string, file: File, fileType = "docx") {
@@ -306,7 +359,43 @@ export function listProjectExports(projectId: string) {
 }
 
 export function getProviders() {
-  return jsonRequest<{ providers: Array<{ id: string; name: string; remote: boolean }>; keys_exposed: boolean }>("/api/providers");
+  return jsonRequest<{ providers: ProviderOption[]; keys_exposed: boolean; secret_storage: string }>("/api/providers");
+}
+
+export function listProviderConfigs() {
+  return jsonRequest<ProviderConfigRecord[]>("/api/provider-configs");
+}
+
+export function saveProviderConfig(payload: { provider: string; model: string; base_url?: string; api_key?: string; allow_local?: boolean }) {
+  return jsonRequest<ProviderConfigRecord>("/api/provider-configs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyProviderConfig(configId: string) {
+  return jsonRequest<ProviderConfigRecord>(`/api/provider-configs/${configId}/verify`, {
+    method: "POST",
+  });
+}
+
+export function deleteProviderConfig(configId: string) {
+  return jsonRequest<ProviderConfigRecord>(`/api/provider-configs/${configId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getAccessCodeStatus() {
+  return jsonRequest<{ required: boolean; verified: boolean }>("/api/access-code/status");
+}
+
+export function verifyAccessCode(accessCode: string) {
+  return jsonRequest<{ required: boolean; verified: boolean }>("/api/access-code/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_code: accessCode }),
+  });
 }
 
 export function exportDownloadUrl(exportId: string) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from hashlib import sha256
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -56,3 +57,22 @@ CORS_ALLOWED_ORIGINS = read_csv_env(
     "CORS_ALLOWED_ORIGINS",
     ["http://127.0.0.1:5173", "http://localhost:5173"] if APP_ENV != "production" else [],
 )
+
+
+ACCESS_CODE_COOKIE_NAME = "scnu_access_token"
+
+
+def access_code() -> str:
+    return os.getenv("SCNU_ACCESS_CODE", "").strip()
+
+
+def secret_key() -> str:
+    configured = os.getenv("SCNU_SECRET_KEY", "").strip()
+    if configured:
+        return configured
+    seed = f"insecure-local-dev-key:{PROJECT_ROOT}:{APP_ENV}"
+    return sha256(seed.encode("utf-8")).hexdigest()
+
+
+def using_insecure_local_secret() -> bool:
+    return not bool(os.getenv("SCNU_SECRET_KEY", "").strip())

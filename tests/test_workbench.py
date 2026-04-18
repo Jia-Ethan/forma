@@ -70,6 +70,42 @@ def test_project_file_parse_proposal_and_export_flow():
         assert export.json()["filename"].endswith(".md")
 
 
+def test_project_defaults_and_patch_metadata():
+    with TestClient(app) as client:
+        project_response = client.post(
+            "/api/projects",
+            json={
+                "title": "阶段一项目",
+                "department": "软件学院",
+                "major": "软件工程",
+                "advisor": "李老师",
+                "student_name": "张三",
+                "student_id": "2020123456",
+            },
+        )
+        assert project_response.status_code == 200
+        project = project_response.json()
+        assert project["school"] == "scnu"
+        assert project["degree_level"] == "undergraduate"
+        assert project["template_profile"] == "scnu-undergraduate"
+        assert project["privacy_mode"] == "local_only"
+        assert project["remote_provider_allowed"] is False
+
+        patched = client.patch(
+            f"/api/projects/{project['id']}",
+            json={"writing_stage": "revision", "privacy_mode": "remote_allowed", "remote_provider_allowed": True},
+        )
+        assert patched.status_code == 200
+        payload = patched.json()
+        assert payload["writing_stage"] == "revision"
+        assert payload["privacy_mode"] == "remote_allowed"
+        assert payload["remote_provider_allowed"] is True
+
+        local_only = client.patch(f"/api/projects/{project['id']}", json={"privacy_mode": "local_only", "remote_provider_allowed": True})
+        assert local_only.status_code == 200
+        assert local_only.json()["remote_provider_allowed"] is False
+
+
 def test_project_delete_removes_export_access():
     with TestClient(app) as client:
         project = client.post("/api/projects", json={"title": "删除测试"}).json()
@@ -103,6 +139,51 @@ def test_provider_config_redacts_key_and_blocks_private_base_url():
         assert allowed.status_code == 200
         assert "secret" not in allowed.text
         assert allowed.json()["has_api_key"] is True
+        assert allowed.json()["allow_local"] is True
+
+        configs = client.get("/api/provider-configs")
+        assert configs.status_code == 200
+        assert all("secret" not in str(item) for item in configs.json())
+
+        verify = client.post(f"/api/provider-configs/{allowed.json()['id']}/verify")
+        assert verify.status_code == 200
+        assert verify.json()["verification_status"] in {"verified", "failed"}
+
+        deleted = client.delete(f"/api/provider-configs/{allowed.json()['id']}")
+        assert deleted.status_code == 200
+        assert client.get("/api/provider-configs").json() == []
+
+
+def test_provider_config_remote_verify_requires_key():
+    with TestClient(app) as client:
+        created = client.post("/api/provider-configs", json={"provider": "openai", "model": "gpt-test", "api_key": ""})
+        assert created.status_code == 200
+        verify = client.post(f"/api/provider-configs/{created.json()['id']}/verify")
+
+    assert verify.status_code == 200
+    assert verify.json()["verification_status"] == "failed"
+    assert "API key" in verify.json()["verification_message"]
+
+
+def test_access_code_guard_requires_and_accepts_code(monkeypatch):
+    monkeypatch.setenv("SCNU_ACCESS_CODE", "phase-one")
+    with TestClient(app) as client:
+        status = client.get("/api/access-code/status")
+        assert status.status_code == 200
+        assert status.json() == {"required": True, "verified": False}
+
+        blocked = client.get("/api/projects")
+        assert blocked.status_code == 401
+
+        wrong = client.post("/api/access-code/verify", json={"access_code": "wrong"})
+        assert wrong.status_code == 401
+
+        verified = client.post("/api/access-code/verify", json={"access_code": "phase-one"})
+        assert verified.status_code == 200
+        assert verified.json()["verified"] is True
+
+        assert client.get("/api/access-code/status").json() == {"required": True, "verified": True}
+        assert client.get("/api/projects").status_code == 200
 
 
 def test_source_guardian_unconfirmed_search_does_not_affect_auditor():

@@ -48,4 +48,10 @@ jobs:
         run: npm run build --prefix web
 
       - name: Build public bundle
-        run: python3 scripts/build_web_public.py
+        run: uv run python scripts/build_web_public.py
+
+      - name: Export compliance fixture
+        run: uv run python scripts/export_compliance_fixture.py tmp/ci-fixture-export.docx
+
+      - name: Check DOCX compliance fixture
+        run: uv run python scripts/check_docx_compliance.py tmp/ci-fixture-export.docx

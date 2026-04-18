@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible problem in SC-TH.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Open...\n2. Upload...\n3. Click..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification output
+      description: Paste relevant test/build/compliance output. Do not include thesis private content or API keys.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Quick export
+        - Workbench
+        - Provider settings
+        - DOCX compliance
+        - Deployment
+        - Documentation

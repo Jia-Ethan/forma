@@ -10,6 +10,7 @@
 - Workbench 项目、文件、版本、导出记录的本地持久化
 - 未确认 Proposal 不会改变当前导出版本
 - Provider 配置不向前端返回密钥，自定义 base URL 有 SSRF 防护
+- 项目级隐私模式、远程 Provider 授权提示和访问码保护
 
 ## 仍需人工复核
 
@@ -38,7 +39,8 @@
 - MinIO/S3 SDK 尚未替换本地文件系统 adapter
 - PDF 转换目前降级保留 `.docx` 产物
 - 真实 LLM Provider 调用尚未接入 Agent Runtime
-- Alembic 迁移脚本尚未建立，当前用 SQLAlchemy metadata 初始化
+- Access code 是单机/私有部署保护，不是多用户权限系统
+- Alembic 迁移脚本尚未建立，当前用 SQLAlchemy metadata 初始化和幂等 schema bootstrap
 
 ## 结论
 

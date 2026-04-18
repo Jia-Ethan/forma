@@ -13,6 +13,8 @@
 ## Workbench
 
 - 可创建项目并上传文件
+- 项目创建向导默认本地优先，并显示远程 Provider 授权提示
+- 项目设置可修改写作阶段、隐私模式和远程授权
 - 文件记录包含类型、hash、storage key、parser、source label
 - 解析任务生成 baseline version、Issue Ledger、Agent events
 - Proposal 默认 pending，接受前不影响当前导出版本
@@ -32,6 +34,8 @@
 ## 安全
 
 - Provider key 不返回前端
+- Provider 设置页只显示 `has_api_key`、模型、base URL 和验证状态
+- 配置 `SCNU_ACCESS_CODE` 时，未验证请求必须被 API 拒绝
 - 自定义 base URL 默认拒绝内网、本机、link-local 和保留地址
 - Ollama 本地地址必须显式允许
 - 日志和 Agent event 不应存储原始正文全文作为调试输出
@@ -41,5 +45,6 @@
 - `uv run pytest tests -q`
 - `npm run test:smoke --prefix web`
 - `npm run build --prefix web`
-- `python3 scripts/build_web_public.py`
-- `python3 scripts/check_docx_compliance.py <docx-path>`
+- `uv run python scripts/build_web_public.py`
+- `uv run python scripts/export_compliance_fixture.py tmp/fixture-export.docx`
+- `uv run python scripts/check_docx_compliance.py tmp/fixture-export.docx`

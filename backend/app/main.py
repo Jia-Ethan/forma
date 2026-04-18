@@ -7,16 +7,17 @@ from base64 import b64decode
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .config import ALLOWED_DOCX_CONTENT_TYPES, ALLOWED_DOCX_EXTENSIONS, APP_ENV, CORS_ALLOWED_ORIGINS, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME
+from .config import ACCESS_CODE_COOKIE_NAME, ALLOWED_DOCX_CONTENT_TYPES, ALLOWED_DOCX_EXTENSIONS, APP_ENV, CORS_ALLOWED_ORIGINS, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME, access_code
 from .contracts import CapabilityFlags, CoverFields, HealthResponse, NormalizedThesis, PrecheckResponse, ServiceLimits, TextPrecheckRequest
 from .errors import AppError
+from .security import verify_access_token
 from .services.export import export_docx
 from .services.parse import from_story2paper_json, normalize_text_input, parse_docx_file
 from .services.precheck import run_precheck
@@ -55,6 +56,31 @@ if CORS_ALLOWED_ORIGINS:
         allow_origins=CORS_ALLOWED_ORIGINS,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+
+ACCESS_CODE_EXEMPT_PATHS = {
+    "/api/health",
+    "/api/access-code/status",
+    "/api/access-code/verify",
+}
+
+
+@app.middleware("http")
+async def access_code_guard(request: Request, call_next):
+    if request.method == "OPTIONS" or not access_code():
+        return await call_next(request)
+    if not request.url.path.startswith("/api/") or request.url.path in ACCESS_CODE_EXEMPT_PATHS:
+        return await call_next(request)
+    if verify_access_token(request.cookies.get(ACCESS_CODE_COOKIE_NAME)):
+        return await call_next(request)
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error_code": "ACCESS_CODE_REQUIRED",
+            "error_message": "需要访问码后才能使用 Workbench API。",
+            "details": {"access_code_required": True},
+        },
     )
 
 

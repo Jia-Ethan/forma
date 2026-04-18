@@ -160,6 +160,42 @@
   color: #171b22;
 }
 
+.workbench-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f8fb;
+}
+
+.workbench-gate-card,
+.workbench-empty-state {
+  width: min(100%, 760px);
+  border: 1px solid #d9dee8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 24px;
+  box-shadow: 0 20px 48px rgba(83, 99, 122, 0.1);
+}
+
+.workbench-gate-card {
+  display: grid;
+  gap: 14px;
+}
+
+.workbench-empty-state {
+  margin: 24px auto;
+  display: grid;
+  gap: 20px;
+}
+
+.workbench-empty-state .eyebrow {
+  margin: 0 0 6px;
+  color: #65758a;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
 .workbench-topbar {
   display: flex;
   justify-content: space-between;
@@ -191,12 +227,29 @@
 }
 
 .workbench-status span,
-.proposal-status {
+.proposal-status,
+.model-status {
   border: 1px solid #cfd7e4;
   border-radius: 8px;
   padding: 6px 9px;
   background: #fff;
   font-size: 13px;
+}
+
+.model-status-local {
+  background: #f2f8f3;
+  border-color: #bfdbc8;
+}
+
+.model-status-ready {
+  background: #eef8ff;
+  border-color: #bad8ee;
+}
+
+.model-status-warn,
+.workbench-message.is-warning {
+  background: #fff8e8;
+  border-color: #ead8a8;
 }
 
 .workbench-grid {
@@ -232,13 +285,33 @@
 .workbench-panel button,
 .workbench-document button,
 .workbench-upload,
-.workbench-list a {
+.workbench-list a,
+.project-wizard button,
+.project-settings button,
+.provider-settings button,
+.workbench-gate-card button {
   border: 1px solid #cfd7e4;
   border-radius: 8px;
   background: #f8fafc;
   color: #171b22;
   padding: 8px 10px;
   text-decoration: none;
+}
+
+.project-wizard button,
+.project-settings button,
+.provider-settings button,
+.workbench-gate-card button {
+  justify-self: start;
+}
+
+.workbench-panel button:disabled,
+.workbench-document button:disabled,
+.project-wizard button:disabled,
+.project-settings button:disabled,
+.provider-settings button:disabled,
+.workbench-gate-card button:disabled {
+  opacity: 0.55;
 }
 
 .workbench-list,
@@ -260,6 +333,11 @@
   text-align: left;
   display: grid;
   gap: 3px;
+}
+
+.workbench-list button span {
+  color: #65758a;
+  font-size: 12px;
 }
 
 .workbench-list button.is-active {
@@ -286,9 +364,37 @@
 }
 
 .workbench-message {
+  border: 1px solid #d6e4f3;
   border-radius: 8px;
   background: #edf4fb;
   padding: 10px 12px;
+}
+
+.workbench-message.is-error {
+  border-color: rgba(220, 170, 174, 0.44);
+  background: rgba(255, 250, 251, 0.86);
+  color: #9a5f64;
+}
+
+.privacy-banner {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #cfe0d4;
+  border-radius: 8px;
+  background: #f3faf5;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.privacy-banner-remote {
+  border-color: #d9c996;
+  background: #fff8e8;
+}
+
+.privacy-banner p {
+  margin: 0;
+  color: #65758a;
+  font-size: 13px;
 }
 
 .workbench-preview,
@@ -318,6 +424,87 @@
   color: #65758a;
 }
 
+.project-wizard,
+.project-settings,
+.provider-settings,
+.provider-settings form,
+.provider-config-list {
+  display: grid;
+  gap: 12px;
+}
+
+.project-settings,
+.provider-settings {
+  border-top: 1px solid #e2e7ef;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.workbench-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-wizard label,
+.project-settings label,
+.provider-settings label,
+.workbench-gate-card label {
+  display: grid;
+  gap: 5px;
+  color: #2d3748;
+  font-size: 13px;
+}
+
+.project-wizard input,
+.project-wizard select,
+.project-settings input,
+.project-settings select,
+.provider-settings input,
+.provider-settings select,
+.workbench-gate-card input {
+  min-width: 0;
+  border: 1px solid #cfd7e4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #171b22;
+}
+
+.privacy-choice {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2e7ef;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.privacy-choice legend {
+  color: #65758a;
+  font-size: 13px;
+}
+
+.privacy-choice label,
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-config-list article {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e2e7ef;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.provider-config-list article div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 980px) {
   .workbench-grid {
     grid-template-columns: 1fr;
@@ -326,5 +513,9 @@
   .workbench-panel,
   .workbench-document {
     min-height: auto;
+  }
+
+  .workbench-form-grid {
+    grid-template-columns: 1fr;
   }
 }

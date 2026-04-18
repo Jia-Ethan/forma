@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import ipaddress
 import json
@@ -10,14 +9,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .contracts import CapabilityFlags, NormalizedThesis
+from .config import ACCESS_CODE_COOKIE_NAME, APP_ENV, access_code, using_insecure_local_secret
 from .database import get_db
 from .errors import AppError
 from .models import (
@@ -36,6 +38,7 @@ from .models import (
     ThesisVersion,
 )
 from .parsers import parse_payload
+from .security import access_token_for_current_code, seal_secret, verify_access_code, verify_access_token
 from .services.export_registry import export_thesis
 from .services.precheck import run_precheck
 from .storage import storage
@@ -49,11 +52,43 @@ def new_id(prefix: str) -> str:
 
 class ProjectCreateRequest(BaseModel):
     title: str = "未命名论文项目"
+    department: str = ""
+    major: str = ""
+    advisor: str = ""
+    student_name: str = ""
+    student_id: str = ""
+    writing_stage: str = "draft"
+    privacy_mode: str = "local_only"
+    remote_provider_allowed: bool = False
+
+
+class ProjectUpdateRequest(BaseModel):
+    title: str | None = None
+    department: str | None = None
+    major: str | None = None
+    advisor: str | None = None
+    student_name: str | None = None
+    student_id: str | None = None
+    writing_stage: str | None = None
+    privacy_mode: str | None = None
+    remote_provider_allowed: bool | None = None
 
 
 class ProjectResponse(BaseModel):
     id: str
     title: str
+    school: str
+    degree_level: str
+    template_profile: str
+    rule_set_id: str
+    department: str
+    major: str
+    advisor: str
+    student_name: str
+    student_id: str
+    writing_stage: str
+    privacy_mode: str
+    remote_provider_allowed: bool
     status: str
     current_version_id: str | None = None
     created_at: datetime
@@ -138,6 +173,24 @@ class ProviderConfigRequest(BaseModel):
     allow_local: bool = False
 
 
+class ProviderConfigResponse(BaseModel):
+    id: str
+    provider: str
+    model: str
+    base_url: str | None
+    allow_local: bool
+    has_api_key: bool
+    verification_status: str
+    verification_message: str
+    last_verified_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AccessCodeVerifyRequest(BaseModel):
+    access_code: str
+
+
 class SourceSearchRequest(BaseModel):
     query: str
 
@@ -153,10 +206,38 @@ def project_to_response(project: ThesisProject) -> ProjectResponse:
     return ProjectResponse(
         id=project.id,
         title=project.title,
+        school=project.school,
+        degree_level=project.degree_level,
+        template_profile=project.template_profile,
+        rule_set_id=project.rule_set_id,
+        department=project.department,
+        major=project.major,
+        advisor=project.advisor,
+        student_name=project.student_name,
+        student_id=project.student_id,
+        writing_stage=project.writing_stage,
+        privacy_mode=project.privacy_mode,
+        remote_provider_allowed=project.remote_provider_allowed,
         status=project.status,
         current_version_id=project.current_version_id,
         created_at=project.created_at,
         updated_at=project.updated_at,
+    )
+
+
+def provider_to_response(row: ProviderConfig) -> ProviderConfigResponse:
+    return ProviderConfigResponse(
+        id=row.id,
+        provider=row.provider,
+        model=row.model,
+        base_url=row.base_url,
+        allow_local=row.allow_local,
+        has_api_key=bool(row.encrypted_api_key),
+        verification_status=row.verification_status,
+        verification_message=row.verification_message,
+        last_verified_at=row.last_verified_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -182,7 +263,19 @@ def latest_version(db: Session, project: ThesisProject) -> ThesisVersion:
 
 @router.post("/projects", response_model=ProjectResponse)
 def create_project(request: ProjectCreateRequest, db: Session = Depends(get_db)) -> ProjectResponse:
-    project = ThesisProject(id=new_id("proj"), title=request.title.strip() or "未命名论文项目")
+    privacy_mode = _normalize_privacy_mode(request.privacy_mode)
+    project = ThesisProject(
+        id=new_id("proj"),
+        title=request.title.strip() or "未命名论文项目",
+        department=request.department.strip(),
+        major=request.major.strip(),
+        advisor=request.advisor.strip(),
+        student_name=request.student_name.strip(),
+        student_id=request.student_id.strip(),
+        writing_stage=_normalize_writing_stage(request.writing_stage),
+        privacy_mode=privacy_mode,
+        remote_provider_allowed=bool(request.remote_provider_allowed and privacy_mode != "local_only"),
+    )
     db.add(project)
     db.add(AuditLog(id=new_id("audit"), project_id=project.id, action="project.created", target_type="project", target_id=project.id))
     db.commit()
@@ -201,6 +294,29 @@ def list_projects(db: Session = Depends(get_db)) -> list[ProjectResponse]:
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: str, db: Session = Depends(get_db)) -> ProjectResponse:
     return project_to_response(require_project(db, project_id))
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(project_id: str, request: ProjectUpdateRequest, db: Session = Depends(get_db)) -> ProjectResponse:
+    project = require_project(db, project_id)
+    updates = request.model_dump(exclude_unset=True)
+    text_fields = ["title", "department", "major", "advisor", "student_name", "student_id"]
+    for field in text_fields:
+        if field in updates and updates[field] is not None:
+            value = str(updates[field]).strip()
+            setattr(project, field, value or ("未命名论文项目" if field == "title" else ""))
+    if request.writing_stage is not None:
+        project.writing_stage = _normalize_writing_stage(request.writing_stage)
+    if request.privacy_mode is not None:
+        project.privacy_mode = _normalize_privacy_mode(request.privacy_mode)
+        if project.privacy_mode == "local_only":
+            project.remote_provider_allowed = False
+    if request.remote_provider_allowed is not None:
+        project.remote_provider_allowed = bool(request.remote_provider_allowed and project.privacy_mode != "local_only")
+    db.add(AuditLog(id=new_id("audit"), project_id=project.id, action="project.updated", target_type="project", target_id=project.id))
+    db.commit()
+    db.refresh(project)
+    return project_to_response(project)
 
 
 @router.delete("/projects/{project_id}", response_model=ProjectResponse)
@@ -471,24 +587,85 @@ def list_providers() -> dict:
             {"id": "ollama", "name": "Ollama", "remote": False},
         ],
         "keys_exposed": False,
+        "secret_storage": "insecure-local-dev" if using_insecure_local_secret() else "configured",
     }
 
 
-@router.post("/provider-configs")
-def create_provider_config(request: ProviderConfigRequest, db: Session = Depends(get_db)) -> dict:
-    validate_base_url(request.base_url, allow_local=request.allow_local or request.provider == "ollama")
+@router.get("/provider-configs", response_model=list[ProviderConfigResponse])
+def list_provider_configs(db: Session = Depends(get_db)) -> list[ProviderConfigResponse]:
+    rows = db.execute(select(ProviderConfig).where(ProviderConfig.deleted_at.is_(None)).order_by(ProviderConfig.created_at.desc())).scalars().all()
+    return [provider_to_response(row) for row in rows]
+
+
+@router.post("/provider-configs", response_model=ProviderConfigResponse)
+def create_provider_config(request: ProviderConfigRequest, db: Session = Depends(get_db)) -> ProviderConfigResponse:
+    provider_id = request.provider.strip().lower()
+    allow_local = bool(request.allow_local and provider_id == "ollama")
+    validate_base_url(request.base_url, allow_local=allow_local)
     row = ProviderConfig(
         id=new_id("prov"),
-        provider=request.provider,
-        model=request.model,
-        base_url=request.base_url,
-        encrypted_api_key=_seal_secret(request.api_key),
-        allow_local=request.allow_local,
+        provider=provider_id,
+        model=request.model.strip(),
+        base_url=request.base_url.strip() if request.base_url else None,
+        encrypted_api_key=seal_secret(request.api_key),
+        allow_local=allow_local,
     )
     db.add(row)
     db.add(AuditLog(id=new_id("audit"), action="provider_config.created", target_type="provider_config", target_id=row.id))
     db.commit()
-    return {"id": row.id, "provider": row.provider, "model": row.model, "base_url": row.base_url, "has_api_key": bool(request.api_key)}
+    db.refresh(row)
+    return provider_to_response(row)
+
+
+@router.post("/provider-configs/{config_id}/verify", response_model=ProviderConfigResponse)
+def verify_provider_config(config_id: str, db: Session = Depends(get_db)) -> ProviderConfigResponse:
+    row = db.get(ProviderConfig, config_id)
+    if not row or row.deleted_at is not None:
+        raise AppError("PROVIDER_CONFIG_NOT_FOUND", "Provider 配置不存在或已删除。", status_code=404)
+    result = _verify_provider_metadata(row)
+    row.verification_status = result["status"]
+    row.verification_message = result["message"]
+    row.last_verified_at = datetime.now(UTC).replace(tzinfo=None)
+    db.add(AuditLog(id=new_id("audit"), action="provider_config.verified", target_type="provider_config", target_id=row.id, metadata_json={"status": row.verification_status}))
+    db.commit()
+    db.refresh(row)
+    return provider_to_response(row)
+
+
+@router.delete("/provider-configs/{config_id}", response_model=ProviderConfigResponse)
+def delete_provider_config(config_id: str, db: Session = Depends(get_db)) -> ProviderConfigResponse:
+    row = db.get(ProviderConfig, config_id)
+    if not row or row.deleted_at is not None:
+        raise AppError("PROVIDER_CONFIG_NOT_FOUND", "Provider 配置不存在或已删除。", status_code=404)
+    row.deleted_at = datetime.now(UTC).replace(tzinfo=None)
+    db.add(AuditLog(id=new_id("audit"), action="provider_config.deleted", target_type="provider_config", target_id=row.id))
+    db.commit()
+    db.refresh(row)
+    return provider_to_response(row)
+
+
+@router.get("/access-code/status")
+def access_code_status(request: Request) -> dict:
+    required = bool(access_code())
+    return {"required": required, "verified": (not required) or verify_access_token(request.cookies.get(ACCESS_CODE_COOKIE_NAME))}
+
+
+@router.post("/access-code/verify")
+def verify_access_code_route(request: AccessCodeVerifyRequest) -> Response:
+    if not access_code():
+        return Response(content=json.dumps({"required": False, "verified": True}), media_type="application/json")
+    if not verify_access_code(request.access_code):
+        raise AppError("ACCESS_CODE_INVALID", "访问码不正确。", status_code=401)
+    response = Response(content=json.dumps({"required": True, "verified": True}), media_type="application/json")
+    response.set_cookie(
+        ACCESS_CODE_COOKIE_NAME,
+        access_token_for_current_code(),
+        httponly=True,
+        secure=APP_ENV == "production",
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+    return response
 
 
 @router.post("/source-guardian/search")
@@ -633,11 +810,42 @@ def _media_type_for_export(row: ExportRecord) -> str:
     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
-def _seal_secret(value: str) -> str:
-    if not value:
-        return ""
-    digest = hashlib.sha256(value.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii")
+def _normalize_writing_stage(value: str) -> str:
+    allowed = {"topic", "proposal", "draft", "revision", "final_check"}
+    normalized = (value or "draft").strip()
+    return normalized if normalized in allowed else "draft"
+
+
+def _normalize_privacy_mode(value: str) -> str:
+    allowed = {"local_only", "remote_allowed"}
+    normalized = (value or "local_only").strip()
+    return normalized if normalized in allowed else "local_only"
+
+
+def _verify_provider_metadata(row: ProviderConfig) -> dict[str, str]:
+    try:
+        validate_base_url(row.base_url, allow_local=row.allow_local)
+    except AppError as exc:
+        return {"status": "failed", "message": exc.message}
+    if not row.model.strip():
+        return {"status": "failed", "message": "请先填写模型名称。"}
+    if row.provider != "ollama" and not row.encrypted_api_key:
+        return {"status": "failed", "message": "远程 Provider 需要服务端 API key。"}
+    if row.provider == "ollama" and row.base_url:
+        return _probe_ollama(row.base_url)
+    return {"status": "verified", "message": "Provider 元数据有效。未进行远程模型调用。"}
+
+
+def _probe_ollama(base_url: str) -> dict[str, str]:
+    endpoint = base_url.rstrip("/") + "/api/tags"
+    try:
+        request = UrlRequest(endpoint, method="GET")
+        with urlopen(request, timeout=1.5) as response:
+            if 200 <= response.status < 500:
+                return {"status": "verified", "message": "Ollama 本地服务可访问。"}
+    except Exception as exc:
+        return {"status": "failed", "message": f"Ollama 本地探测失败：{exc}"}
+    return {"status": "failed", "message": "Ollama 本地服务返回异常状态。"}
 
 
 def validate_base_url(base_url: str | None, *, allow_local: bool) -> None:
@@ -652,7 +860,7 @@ def validate_base_url(base_url: str | None, *, allow_local: bool) -> None:
         raise AppError("INVALID_PROVIDER_BASE_URL", "Provider base_url 无法解析。", status_code=400) from exc
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if allow_local:
-            continue
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        if ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise AppError("PROVIDER_BASE_URL_BLOCKED", "Provider base_url 指向高风险地址，已被 SSRF 防护拦截。", status_code=400)
+        if not allow_local and (ip.is_private or ip.is_loopback):
             raise AppError("PROVIDER_BASE_URL_BLOCKED", "Provider base_url 指向内网或本机地址，已被 SSRF 防护拦截。", status_code=400)
