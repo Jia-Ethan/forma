@@ -17,7 +17,8 @@ export const healthPayload: HealthResponse = {
     profile: "undergraduate",
   },
   limits: {
-    max_docx_size_bytes: 4194304,
+    max_docx_size_bytes: 20971520,
+    max_text_precheck_chars: 80000,
   },
 };
 
@@ -221,6 +222,8 @@ export function samplePrecheck(overrides: Partial<PrecheckResponse> = {}): Prech
         issue_ids: [],
       },
     ],
+    export_token: "v1:9999999999:test:signature",
+    expires_at: "2099-01-01T00:00:00",
     ...overrides,
   };
 }

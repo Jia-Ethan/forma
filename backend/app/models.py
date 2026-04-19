@@ -176,6 +176,8 @@ class ExportRecord(Base, TimestampMixin):
     storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     filename: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ProviderConfig(Base, TimestampMixin):

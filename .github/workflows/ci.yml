@@ -47,6 +47,12 @@ jobs:
       - name: Build frontend
         run: npm run build --prefix web
 
+      - name: Install Playwright Chromium
+        run: npx --prefix web playwright install --with-deps chromium
+
+      - name: Run Playwright public smoke
+        run: npm run test:e2e --prefix web
+
       - name: Build public bundle
         run: uv run python scripts/build_web_public.py
 

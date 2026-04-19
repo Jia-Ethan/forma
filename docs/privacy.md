@@ -11,6 +11,9 @@ SCNU Thesis Agent Workbench 的默认策略是 local-first。
 - 允许快速 `.docx` 预检与规范化导出
 - 允许查看静态 Workbench demo project
 - 不向匿名用户开放 Provider 设置入口
+- 上传文件处理完成后删除，导出文件只保留 30 分钟
+- 匿名入口需要隐私确认、Turnstile 校验与 IP 限流
+- 日志只记录时间、IP hash、文件大小、耗时、状态码和错误码，不记录正文内容
 
 ## Provider 边界
 

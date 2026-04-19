@@ -1,35 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CoverFields, HealthResponse, PrecheckResponse } from "../generated/contracts";
+import { useEffect, useMemo, useState } from "react";
+import type { HealthResponse, PrecheckResponse } from "../generated/contracts";
 import {
   ApiError,
+  downloadUrlAsBlob,
   downloadBlob,
-  exportDocx,
   getHealth,
-  precheckDocx,
-  precheckText,
-  precheckFromStory2Paper,
-  story2paperGenerate,
-  story2paperGetResult,
-  story2paperWS,
-  type Story2PaperWSEvent,
+  publicExportDocx,
+  publicPrecheckDocx,
+  publicPrecheckText,
 } from "./api";
 import { exportFilename, inferPhase, mapApiError, validateDocxFile, validateTextInput, type FlowPhase, type InlineErrorState } from "./domain";
 
 const EXPORT_MIN_DURATION_MS = typeof navigator !== "undefined" && /jsdom/i.test(navigator.userAgent) ? 20 : 4200;
-
-export type AIGenPhase = "idle" | "generating" | "done" | "error";
-
-const EMPTY_COVER = (): CoverFields => ({
-  title: "",
-  advisor: "",
-  student_name: "",
-  student_id: "",
-  school: "华南师范大学",
-  department: "",
-  major: "",
-  class_name: "",
-  graduation_time: "",
-});
 
 export function useMinimalExportFlow() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -41,20 +23,8 @@ export function useMinimalExportFlow() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [inlineError, setInlineError] = useState<InlineErrorState | null>(null);
-
-  // AI generation state
-  const [aiPhase, setAiPhase] = useState<AIGenPhase>("idle");
-  const [sourceTab, setSourceTab] = useState<"upload" | "ai">("upload");
-  const [researchPrompt, setResearchPrompt] = useState("");
-  const [paperId, setPaperId] = useState<string | null>(null);
-  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
-  const [sectionIndex, setSectionIndex] = useState(0);
-  const [revisionRound, setRevisionRound] = useState(0);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [coverFields, setCoverFields] = useState<CoverFields>(EMPTY_COVER);
-
-  // WebSocket reference for cleanup
-  const wsRef = useRef<WebSocket | null>(null);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   useEffect(() => {
     getHealth()
@@ -96,20 +66,8 @@ export function useMinimalExportFlow() {
     setExporting(false);
     setExportProgress(0);
     setInlineError(null);
-    clearAIGen();
-  }
-
-  function clearAIGen() {
-    wsRef.current?.close();
-    wsRef.current = null;
-    setAiPhase("idle");
-    setPaperId(null);
-    setCurrentAgent(null);
-    setSectionIndex(0);
-    setRevisionRound(0);
-    setAiError(null);
-    setResearchPrompt("");
-    setCoverFields(EMPTY_COVER());
+    setPrivacyAccepted(false);
+    setTurnstileToken("");
   }
 
   function resetResult() {
@@ -165,99 +123,20 @@ export function useMinimalExportFlow() {
       setInlineError(validation);
       return;
     }
+    if (!privacyAccepted) {
+      setInlineError({ message: "请先确认隐私说明后再继续。", code: "PRIVACY_CONFIRMATION_REQUIRED" });
+      return;
+    }
 
     setBusy(true);
     try {
-      const response = selectedFile ? await precheckDocx(selectedFile) : await precheckText(rawText);
+      const response = selectedFile ? await publicPrecheckDocx(selectedFile, privacyAccepted, turnstileToken) : await publicPrecheckText(rawText, privacyAccepted, turnstileToken);
       setPrecheck(response);
       setPreviewModalOpen(true);
     } catch (error) {
       setInlineError(mapApiError(error instanceof ApiError ? error : new ApiError("预检失败", "PARSE_FAILED")));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function handleAIGenerate() {
-    if (!researchPrompt.trim()) return;
-    setInlineError(null);
-    setAiPhase("generating");
-    setPaperId(null);
-    setCurrentAgent(null);
-    setSectionIndex(0);
-    setRevisionRound(0);
-    setAiError(null);
-
-    try {
-      // Start generation
-      const genRes = await story2paperGenerate(researchPrompt);
-      const pid = genRes.paper_id;
-      setPaperId(pid);
-
-      // Connect WebSocket to track progress
-      const ws = story2paperWS(pid);
-      wsRef.current = ws;
-
-      await new Promise<void>((resolve, reject) => {
-        ws.onmessage = (event: MessageEvent<string>) => {
-          try {
-            const data = JSON.parse(event.data) as Story2PaperWSEvent;
-            if (data.current_agent) setCurrentAgent(data.current_agent ?? null);
-            if (data.section_index !== undefined) setSectionIndex(data.section_index ?? 0);
-            if (data.revision_round !== undefined) setRevisionRound(data.revision_round ?? 0);
-            if (data.event === "done" && data.final_output) {
-              ws.close();
-              resolve();
-            }
-          } catch {
-            // ignore parse errors
-          }
-        };
-        ws.onerror = () => {
-          ws.close();
-          reject(new ApiError("WebSocket 连接失败", "WS_ERROR"));
-        };
-        ws.onclose = () => {
-          if (wsRef.current === ws) resolve();
-        };
-      });
-
-      // Fetch full result
-      const result = await story2paperGetResult(pid);
-
-      // Build schema_data from result
-      const schemaData = {
-        title: (result.outline as Record<string, unknown>)?.["title"] ?? researchPrompt,
-        outline: result.outline ?? {},
-        section_drafts: result.section_drafts ?? [],
-        contract: result.contract ?? {},
-        figures: ((result.contract as Record<string, unknown>)?.["figures"] as unknown[]) ?? [],
-        tables: ((result.contract as Record<string, unknown>)?.["tables"] as unknown[]) ?? [],
-        references: ((result.contract as Record<string, unknown>)?.["citations"] as unknown[]) ?? [],
-        abstract_zh: "",
-        abstract_en: "",
-        keywords: [],
-      };
-
-      // Precheck via portal
-      setBusy(true);
-      const precheckRes = await precheckFromStory2Paper(schemaData, coverFields);
-      setPrecheck(precheckRes);
-      setPreviewModalOpen(true);
-      setAiPhase("done");
-    } catch (error) {
-      setAiPhase("error");
-      setAiError(
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "生成失败，请稍后重试",
-      );
-      wsRef.current?.close();
-    } finally {
-      setBusy(false);
-      wsRef.current = null;
     }
   }
 
@@ -276,8 +155,12 @@ export function useMinimalExportFlow() {
     setExporting(true);
 
     try {
+      if (!precheck.export_token) {
+        throw new ApiError("导出凭证已失效，请重新预检后再导出。", "EXPORT_TOKEN_INVALID");
+      }
       const minDelay = new Promise((resolve) => window.setTimeout(resolve, EXPORT_MIN_DURATION_MS));
-      const [blob] = await Promise.all([exportDocx(precheck.thesis), minDelay]);
+      const [exported] = await Promise.all([publicExportDocx(precheck.thesis, precheck.export_token), minDelay]);
+      const blob = await downloadUrlAsBlob(exported.download_url);
       setExportProgress(100);
       downloadBlob(blob, exportFilename(precheck.thesis));
       await new Promise((resolve) => window.setTimeout(resolve, 220));
@@ -299,6 +182,10 @@ export function useMinimalExportFlow() {
     exporting,
     exportProgress,
     inlineError,
+    privacyAccepted,
+    setPrivacyAccepted,
+    turnstileToken,
+    setTurnstileToken,
     clearAll,
     handleFileSelect,
     handleUploadTrigger,
@@ -306,20 +193,5 @@ export function useMinimalExportFlow() {
     handlePrecheck,
     handleCancelPreview,
     handleConfirmExport,
-    // AI generation
-    aiPhase,
-    sourceTab,
-    setSourceTab,
-    researchPrompt,
-    paperId,
-    currentAgent,
-    sectionIndex,
-    revisionRound,
-    aiError,
-    coverFields,
-    setResearchPrompt,
-    setCoverFields,
-    handleAIGenerate,
-    handleAIClear: clearAIGen,
   };
 }

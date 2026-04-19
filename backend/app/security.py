@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import os
+import time
 
 from .config import access_code, secret_key
 
@@ -23,6 +24,32 @@ def verify_access_token(token: str | None) -> bool:
 def verify_access_code(candidate: str) -> bool:
     expected = access_code()
     return bool(expected and hmac.compare_digest(candidate.strip(), expected))
+
+
+def thesis_digest(payload: str) -> str:
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def export_token_for_digest(digest: str, expires_at: int) -> str:
+    body = f"export:{digest}:{expires_at}"
+    signature = hmac.new(secret_key().encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"v1:{expires_at}:{digest}:{signature}"
+
+
+def verify_export_token(token: str | None, digest: str) -> bool:
+    if not token:
+        return False
+    parts = token.split(":")
+    if len(parts) != 4 or parts[0] != "v1":
+        return False
+    try:
+        expires_at = int(parts[1])
+    except ValueError:
+        return False
+    if expires_at < int(time.time()) or parts[2] != digest:
+        return False
+    expected = export_token_for_digest(digest, expires_at)
+    return hmac.compare_digest(token, expected)
 
 
 def seal_secret(value: str) -> str:

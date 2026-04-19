@@ -22,10 +22,14 @@ describe("App business flow", () => {
     vi.restoreAllMocks();
   });
 
+  function acceptPrivacy() {
+    fireEvent.click(screen.getByRole("checkbox", { name: /我确认已阅读隐私说明/ }));
+  }
+
   it("shows a backend precheck error below the composer", async () => {
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) {
+      if (url.includes("/api/public/precheck/text")) {
         return jsonResponse({ error_code: "PARSE_FAILED", error_message: "解析失败" }, false);
       }
       return jsonResponse(healthPayload);
@@ -35,6 +39,7 @@ describe("App business flow", () => {
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "不完整内容" },
     });
+    acceptPrivacy();
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
 
     expect(await screen.findByText("无法完成结构识别，请调整输入内容后重试。")).toBeInTheDocument();
@@ -43,7 +48,7 @@ describe("App business flow", () => {
   it("keeps confirm button disabled when blocking issues remain", async () => {
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) {
+      if (url.includes("/api/public/precheck/text")) {
         return jsonResponse(
           samplePrecheck({
             summary: {
@@ -81,6 +86,7 @@ describe("App business flow", () => {
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "摘要\n内容不足" },
     });
+    acceptPrivacy();
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
 
     expect(await screen.findByRole("button", { name: "仍有 2 项未满足" })).toBeDisabled();
@@ -89,10 +95,13 @@ describe("App business flow", () => {
   it("exports docx and resets after success", async () => {
     const fetchMock = mockFetch((input, init) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) {
+      if (url.includes("/api/public/precheck/text")) {
         return jsonResponse(samplePrecheck({ thesis: sampleThesis() }));
       }
-      if (url.includes("/api/export/docx")) {
+      if (url.includes("/api/public/exports/docx")) {
+        return jsonResponse({ export_id: "pub_1", download_url: "/api/public/exports/pub_1/download", report_url: "/api/public/exports/pub_1/report", expires_at: "2099-01-01T00:00:00" });
+      }
+      if (url.includes("/api/public/exports/pub_1/download")) {
         return jsonResponse({});
       }
       return jsonResponse(healthPayload);
@@ -107,6 +116,7 @@ describe("App business flow", () => {
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "结构化映射示例论文\n\n摘要\n这是满足长度要求的摘要内容。".repeat(8) },
     });
+    acceptPrivacy();
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
     await screen.findByRole("dialog", { name: "导出前结构预检" });
 
@@ -116,18 +126,19 @@ describe("App business flow", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "导出前结构预检" })).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("论文正文输入框")).toHaveValue(""));
 
-    const exportCall = fetchMock.mock.calls.find(([input]) => String(input).includes("/api/export/docx"));
+    const exportCall = fetchMock.mock.calls.find(([input]) => String(input).includes("/api/public/exports/docx"));
     expect(exportCall).toBeTruthy();
     const [, request] = exportCall as [RequestInfo | URL, RequestInit];
     const payload = JSON.parse(String(request.body));
-    expect(payload.cover.title).toBe("结构化映射示例论文");
+    expect(payload.thesis.cover.title).toBe("结构化映射示例论文");
+    expect(payload.export_token).toBe("v1:9999999999:test:signature");
   });
 
   it("keeps upload disabled while precheck is in flight", async () => {
     const precheckDeferred = deferredResponse();
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) {
+      if (url.includes("/api/public/precheck/text")) {
         return precheckDeferred.promise;
       }
       return jsonResponse(healthPayload);
@@ -138,6 +149,7 @@ describe("App business flow", () => {
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "结构化映射示例论文\n\n摘要\n这是满足长度要求的摘要内容。".repeat(8) },
     });
+    acceptPrivacy();
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
 
     const uploadButton = screen.getByRole("button", { name: "上传 .docx 文件" });
@@ -156,11 +168,14 @@ describe("App business flow", () => {
     const exportDeferred = deferredResponse();
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) {
+      if (url.includes("/api/public/precheck/text")) {
         return jsonResponse(samplePrecheck({ thesis: sampleThesis() }));
       }
-      if (url.includes("/api/export/docx")) {
+      if (url.includes("/api/public/exports/docx")) {
         return exportDeferred.promise;
+      }
+      if (url.includes("/api/public/exports/pub_1/download")) {
+        return jsonResponse({});
       }
       return jsonResponse(healthPayload);
     });
@@ -173,6 +188,7 @@ describe("App business flow", () => {
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "结构化映射示例论文\n\n摘要\n这是满足长度要求的摘要内容。".repeat(8) },
     });
+    acceptPrivacy();
     fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
     await screen.findByRole("dialog", { name: "导出前结构预检" });
     fireEvent.click(screen.getByRole("button", { name: "确认并导出" }));
@@ -186,7 +202,7 @@ describe("App business flow", () => {
     fireEvent.click(uploadButton);
     expect(clickSpy).not.toHaveBeenCalled();
 
-    exportDeferred.resolve(await jsonResponse({}));
+    exportDeferred.resolve(await jsonResponse({ export_id: "pub_1", download_url: "/api/public/exports/pub_1/download", report_url: "/api/public/exports/pub_1/report", expires_at: "2099-01-01T00:00:00" }));
     await waitFor(() => expect(screen.getByLabelText("论文正文输入框")).toHaveValue(""));
   });
 });

@@ -175,6 +175,9 @@ def test_access_code_guard_requires_and_accepts_code(monkeypatch):
         blocked = client.get("/api/projects")
         assert blocked.status_code == 401
 
+        public = client.post("/api/public/precheck/text", json={"text": "已有论文正文", "privacy_accepted": True})
+        assert public.status_code == 200
+
         wrong = client.post("/api/access-code/verify", json={"access_code": "wrong"})
         assert wrong.status_code == 401
 
@@ -184,6 +187,17 @@ def test_access_code_guard_requires_and_accepts_code(monkeypatch):
 
         assert client.get("/api/access-code/status").json() == {"required": True, "verified": True}
         assert client.get("/api/projects").status_code == 200
+
+
+def test_project_audit_logs_are_listed():
+    with TestClient(app) as client:
+        project = client.post("/api/projects", json={"title": "审计日志项目"}).json()
+        logs = client.get(f"/api/projects/{project['id']}/audit-logs")
+
+    assert logs.status_code == 200
+    payload = logs.json()
+    assert payload
+    assert payload[0]["action"] == "project.created"
 
 
 def test_source_guardian_unconfirmed_search_does_not_affect_auditor():

@@ -51,7 +51,10 @@ def read_csv_env(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-MAX_UPLOAD_SIZE_BYTES = read_int_env("MAX_DOCX_SIZE_BYTES", 4 * 1024 * 1024)
+MAX_UPLOAD_SIZE_BYTES = read_int_env("MAX_DOCX_SIZE_BYTES", 20 * 1024 * 1024)
+MAX_TEXT_PRECHECK_CHARS = read_int_env("MAX_TEXT_PRECHECK_CHARS", 80_000)
+PUBLIC_EXPORT_RETENTION_SECONDS = read_int_env("PUBLIC_EXPORT_RETENTION_SECONDS", 30 * 60)
+PUBLIC_EXPORT_RATE_LIMIT_PER_HOUR = read_int_env("PUBLIC_EXPORT_RATE_LIMIT_PER_HOUR", 10)
 DEBUG_PERSIST_ARTIFACTS = read_bool_env("SCNU_DEBUG_PERSIST_ARTIFACTS", False)
 CORS_ALLOWED_ORIGINS = read_csv_env(
     "CORS_ALLOWED_ORIGINS",
@@ -76,3 +79,17 @@ def secret_key() -> str:
 
 def using_insecure_local_secret() -> bool:
     return not bool(os.getenv("SCNU_SECRET_KEY", "").strip())
+
+
+def turnstile_site_key() -> str:
+    return os.getenv("TURNSTILE_SITE_KEY", "").strip()
+
+
+def turnstile_secret_key() -> str:
+    return os.getenv("TURNSTILE_SECRET_KEY", "").strip()
+
+
+def turnstile_required() -> bool:
+    if read_bool_env("TURNSTILE_REQUIRED", False):
+        return True
+    return (os.getenv("APP_ENV", APP_ENV).strip().lower() or APP_ENV) == "production"

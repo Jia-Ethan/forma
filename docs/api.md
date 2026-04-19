@@ -7,8 +7,52 @@ This document covers the Workbench-facing API surface. All endpoints are under `
 When `SCNU_ACCESS_CODE` is set, all `/api/*` routes require the access cookie except:
 
 - `GET /api/health`
+- `POST /api/public/precheck/docx`
+- `POST /api/public/precheck/text`
+- `POST /api/public/exports/docx`
+- `GET /api/public/exports/{id}/download`
+- `GET /api/public/exports/{id}/report`
 - `GET /api/access-code/status`
 - `POST /api/access-code/verify`
+
+## Public Quick Export
+
+### `POST /api/public/precheck/docx`
+
+Multipart fields:
+
+- `file`: `.docx`, max 20 MB
+- `privacy_accepted`: must be `true`
+- `turnstile_token`: required in production
+
+Returns `PrecheckResponse` with `export_token` and `expires_at`.
+
+### `POST /api/public/precheck/text`
+
+JSON request:
+
+```json
+{
+  "text": "已有论文正文",
+  "privacy_accepted": true,
+  "turnstile_token": "..."
+}
+```
+
+Text input is limited to 80,000 characters. The endpoint is for existing thesis text precheck only.
+
+### `POST /api/public/exports/docx`
+
+JSON request:
+
+```json
+{
+  "thesis": {},
+  "export_token": "..."
+}
+```
+
+Returns a retained export with `download_url`, `report_url`, and `expires_at`. Public exports are kept for 30 minutes.
 
 ### `GET /api/access-code/status`
 

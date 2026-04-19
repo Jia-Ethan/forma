@@ -75,3 +75,11 @@ Upload Materials
 - 本地优先状态
 
 它不包含真实论文正文，不调用远程 Provider，也不保存用户数据。
+
+v0.4 public demo 支持前端本地交互：
+
+- 点击 Proposal 改变 accepted / stashed / rejected 状态
+- 切换 baseline 与 accepted 版本
+- 触发模拟导出历史
+- 一键重置 demo
+- 禁止上传真实论文

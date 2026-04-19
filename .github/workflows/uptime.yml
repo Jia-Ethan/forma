@@ -1,0 +1,31 @@
+name: Uptime
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      SCNU_PUBLIC_BASE_URL: ${{ secrets.SCNU_PUBLIC_BASE_URL }}
+    steps:
+      - name: Check configured URL
+        run: |
+          if [ -z "$SCNU_PUBLIC_BASE_URL" ]; then
+            echo "SCNU_PUBLIC_BASE_URL is not configured; skipping uptime smoke."
+            exit 0
+          fi
+
+      - name: Check homepage
+        if: env.SCNU_PUBLIC_BASE_URL != ''
+        run: curl -fsSL "$SCNU_PUBLIC_BASE_URL/" | grep -E "SCNU Thesis|华师本科论文"
+
+      - name: Check health
+        if: env.SCNU_PUBLIC_BASE_URL != ''
+        run: curl -fsSL "$SCNU_PUBLIC_BASE_URL/api/health" | grep '"ok":true'
+
+      - name: Check Workbench demo bundle
+        if: env.SCNU_PUBLIC_BASE_URL != ''
+        run: curl -fsSL "$SCNU_PUBLIC_BASE_URL/#/workbench-demo" | grep -E "SCNU Thesis|华师本科论文"

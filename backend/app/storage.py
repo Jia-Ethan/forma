@@ -5,6 +5,7 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from .config import OUTPUTS_DIR
 
@@ -14,6 +15,14 @@ class StoredObject:
     key: str
     sha256: str
     size: int
+
+
+class ObjectStorage(Protocol):
+    def put_bytes(self, key: str, payload: bytes) -> StoredObject: ...
+    def get_bytes(self, key: str) -> bytes: ...
+    def exists(self, key: str) -> bool: ...
+    def delete(self, key: str) -> None: ...
+    def delete_prefix(self, prefix: str) -> None: ...
 
 
 class LocalObjectStorage:
@@ -54,4 +63,27 @@ class LocalObjectStorage:
                 path.unlink()
 
 
-storage = LocalObjectStorage()
+class S3CompatibleObjectStorage:
+    """Reserved adapter boundary for COS/R2/S3 without coupling MVP to remote storage."""
+
+    def __init__(self, endpoint_url: str, bucket: str):
+        self.endpoint_url = endpoint_url
+        self.bucket = bucket
+
+    def put_bytes(self, key: str, payload: bytes) -> StoredObject:
+        raise NotImplementedError("S3-compatible storage is reserved for a future backend.")
+
+    def get_bytes(self, key: str) -> bytes:
+        raise NotImplementedError("S3-compatible storage is reserved for a future backend.")
+
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError("S3-compatible storage is reserved for a future backend.")
+
+    def delete(self, key: str) -> None:
+        raise NotImplementedError("S3-compatible storage is reserved for a future backend.")
+
+    def delete_prefix(self, prefix: str) -> None:
+        raise NotImplementedError("S3-compatible storage is reserved for a future backend.")
+
+
+storage: ObjectStorage = LocalObjectStorage()

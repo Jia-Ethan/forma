@@ -71,19 +71,29 @@ export function getHealth() {
 }
 
 export function precheckDocx(file: File) {
+  return publicPrecheckDocx(file, true, "");
+}
+
+export function publicPrecheckDocx(file: File, privacyAccepted: boolean, turnstileToken = "") {
   const formData = new FormData();
   formData.append("file", file);
-  return jsonRequest<PrecheckResponse>("/api/precheck/docx", {
+  formData.append("privacy_accepted", String(privacyAccepted));
+  formData.append("turnstile_token", turnstileToken);
+  return jsonRequest<PrecheckResponse>("/api/public/precheck/docx", {
     method: "POST",
     body: formData,
   });
 }
 
 export function precheckText(text: string) {
-  return jsonRequest<PrecheckResponse>("/api/precheck/text", {
+  return publicPrecheckText(text, true, "");
+}
+
+export function publicPrecheckText(text: string, privacyAccepted: boolean, turnstileToken = "") {
+  return jsonRequest<PrecheckResponse>("/api/public/precheck/text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, privacy_accepted: privacyAccepted, turnstile_token: turnstileToken }),
   });
 }
 
@@ -93,6 +103,25 @@ export function exportDocx(thesis: NormalizedThesis) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(thesis),
   });
+}
+
+export interface PublicExportResponse {
+  export_id: string;
+  download_url: string;
+  report_url: string;
+  expires_at: string;
+}
+
+export function publicExportDocx(thesis: NormalizedThesis, exportToken: string) {
+  return jsonRequest<PublicExportResponse>("/api/public/exports/docx", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ thesis, export_token: exportToken }),
+  });
+}
+
+export function downloadUrlAsBlob(url: string) {
+  return blobRequest(url);
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

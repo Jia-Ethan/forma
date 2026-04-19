@@ -14,9 +14,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .config import ACCESS_CODE_COOKIE_NAME, ALLOWED_DOCX_CONTENT_TYPES, ALLOWED_DOCX_EXTENSIONS, APP_ENV, CORS_ALLOWED_ORIGINS, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME, access_code
+from .config import ACCESS_CODE_COOKIE_NAME, ALLOWED_DOCX_CONTENT_TYPES, ALLOWED_DOCX_EXTENSIONS, APP_ENV, CORS_ALLOWED_ORIGINS, MAX_TEXT_PRECHECK_CHARS, MAX_UPLOAD_SIZE_BYTES, TEMPLATE_NAME, access_code
 from .contracts import CapabilityFlags, CoverFields, HealthResponse, NormalizedThesis, PrecheckResponse, ServiceLimits, TextPrecheckRequest
 from .errors import AppError
+from .public_api import router as public_router
 from .security import verify_access_token
 from .services.export import export_docx
 from .services.parse import from_story2paper_json, normalize_text_input, parse_docx_file
@@ -45,6 +46,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SCNU Thesis Portal", lifespan=lifespan)
+app.include_router(public_router)
 app.include_router(workbench_router)
 
 if PUBLIC_ASSETS.exists():
@@ -70,7 +72,7 @@ ACCESS_CODE_EXEMPT_PATHS = {
 async def access_code_guard(request: Request, call_next):
     if request.method == "OPTIONS" or not access_code():
         return await call_next(request)
-    if not request.url.path.startswith("/api/") or request.url.path in ACCESS_CODE_EXEMPT_PATHS:
+    if not request.url.path.startswith("/api/") or request.url.path.startswith("/api/public/") or request.url.path in ACCESS_CODE_EXEMPT_PATHS:
         return await call_next(request)
     if verify_access_token(request.cookies.get(ACCESS_CODE_COOKIE_NAME)):
         return await call_next(request)
@@ -118,7 +120,7 @@ def health() -> HealthResponse:
         app_env=APP_ENV,
         template=TEMPLATE_NAME,
         capabilities=capability_flags(),
-        limits=ServiceLimits(max_docx_size_bytes=MAX_UPLOAD_SIZE_BYTES),
+        limits=ServiceLimits(max_docx_size_bytes=MAX_UPLOAD_SIZE_BYTES, max_text_precheck_chars=MAX_TEXT_PRECHECK_CHARS),
     )
 
 

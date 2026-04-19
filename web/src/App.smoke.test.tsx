@@ -18,13 +18,17 @@ describe("App smoke", () => {
     vi.restoreAllMocks();
   });
 
+  function acceptPrivacy() {
+    fireEvent.click(screen.getByRole("checkbox", { name: /我确认已阅读隐私说明/ }));
+  }
+
   it("renders the minimal home shell", async () => {
     mockFetch();
 
     const { container } = render(<App />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "华师本科论文格式合规与 AI 协作工作台" })).toBeInTheDocument();
-    expect(screen.getByText(/公开站默认只做本地快速导出，不启用远程 AI/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "华师本科论文格式合规与版本工作台" })).toBeInTheDocument();
+    expect(screen.getByText(/公开站只做快速格式预检与 Word 导出，不启用远程 AI/)).toBeInTheDocument();
     expect(screen.queryByText("极简论文预检与 Word 导出")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("上传 .docx 或粘贴论文内容")).not.toBeInTheDocument();
     expect(screen.queryByText("按 Cmd/Ctrl + Enter 开始预检")).not.toBeInTheDocument();
@@ -34,6 +38,8 @@ describe("App smoke", () => {
     expect(uploadButton).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始预检" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看 Workbench" })).toHaveAttribute("href", "#/workbench-demo");
+    expect(screen.getByRole("link", { name: "English" })).toHaveAttribute("href", "#/en");
+    expect(screen.getByPlaceholderText("粘贴已有论文正文进行格式预检")).toBeInTheDocument();
     expect(screen.queryByText("生成论文")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 生成")).not.toBeInTheDocument();
     expect(input.tabIndex).toBe(-1);
@@ -53,6 +59,18 @@ describe("App smoke", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("requires privacy confirmation before precheck", async () => {
+    mockFetch();
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("论文正文输入框"), {
+      target: { value: "已有论文正文" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始预检" }));
+
+    expect(await screen.findByText("请先确认隐私说明后再继续。")).toBeInTheDocument();
+  });
+
   it("renders the public Workbench demo without booting private APIs", async () => {
     window.history.replaceState(null, "", "/#/workbench-demo");
     const fetchMock = mockFetch();
@@ -62,6 +80,9 @@ describe("App smoke", () => {
     expect(screen.getByRole("heading", { level: 1, name: "SCNU Thesis Agent Workbench Demo" })).toBeInTheDocument();
     expect(screen.getByText("安全示例项目，不包含真实论文正文，不调用远程 Provider。")).toBeInTheDocument();
     expect(screen.getAllByText("基于学习投入的本科论文示例")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "重置 demo" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "接受" })[0]);
+    expect(screen.getAllByText("accepted").length).toBeGreaterThan(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -176,11 +197,12 @@ describe("App smoke", () => {
   it("opens preview modal after text precheck succeeds", async () => {
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) return jsonResponse(samplePrecheck());
+      if (url.includes("/api/public/precheck/text")) return jsonResponse(samplePrecheck());
       return jsonResponse(healthPayload);
     });
 
     render(<App />);
+    acceptPrivacy();
 
     fireEvent.change(screen.getByLabelText("论文正文输入框"), {
       target: { value: "结构化映射示例论文\n\n摘要\n本文展示结构化映射后的论文导出流程，并说明新的预检主线。\n\n引言\n这是足够长的正文内容，用于通过预检。".repeat(10) },
@@ -195,11 +217,12 @@ describe("App smoke", () => {
   it("keeps input after canceling preview modal", async () => {
     mockFetch((input) => {
       const url = String(input);
-      if (url.includes("/api/precheck/text")) return jsonResponse(samplePrecheck());
+      if (url.includes("/api/public/precheck/text")) return jsonResponse(samplePrecheck());
       return jsonResponse(healthPayload);
     });
 
     render(<App />);
+    acceptPrivacy();
 
     const textarea = screen.getByLabelText("论文正文输入框");
     fireEvent.change(textarea, {

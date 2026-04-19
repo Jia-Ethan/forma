@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -225,6 +226,7 @@ class NormalizedThesis(BaseModel):
 
 class ServiceLimits(BaseModel):
     max_docx_size_bytes: int
+    max_text_precheck_chars: int = 80_000
 
 
 class HealthResponse(BaseModel):
@@ -296,3 +298,5 @@ class PrecheckResponse(BaseModel):
     summary: PrecheckSummary
     issues: list[PrecheckIssue] = Field(default_factory=list)
     preview_blocks: list[PreviewBlock] = Field(default_factory=list)
+    export_token: str | None = None
+    expires_at: datetime | None = None

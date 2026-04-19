@@ -12,7 +12,6 @@ from .config import OUTPUTS_DIR
 
 def database_url() -> str:
     default_path = OUTPUTS_DIR / "workbench.db"
-    default_path.parent.mkdir(parents=True, exist_ok=True)
     return os.getenv("SCNU_DATABASE_URL", f"sqlite:///{default_path}").strip()
 
 
@@ -20,17 +19,30 @@ class Base(DeclarativeBase):
     pass
 
 
-DATABASE_URL = database_url()
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+engine = None
+SessionLocal = sessionmaker(autoflush=False, autocommit=False, future=True)
+
+
+def get_engine():
+    global engine
+    if engine is None:
+        url = database_url()
+        if url.startswith("sqlite"):
+            sqlite_path = url.removeprefix("sqlite:///")
+            if sqlite_path and sqlite_path != ":memory:":
+                Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+        connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+        engine = create_engine(url, connect_args=connect_args, future=True)
+        SessionLocal.configure(bind=engine)
+    return engine
 
 
 def init_db() -> None:
     # Import models before create_all so SQLAlchemy registers metadata.
     from . import models as _models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
+    active_engine = get_engine()
+    Base.metadata.create_all(bind=active_engine)
     bootstrap_schema()
 
 
@@ -55,15 +67,20 @@ SCHEMA_BOOTSTRAP_COLUMNS = {
         "last_verified_at": {"sqlite": "DATETIME", "postgresql": "TIMESTAMP"},
         "deleted_at": {"sqlite": "DATETIME", "postgresql": "TIMESTAMP"},
     },
+    "exports": {
+        "expires_at": {"sqlite": "DATETIME", "postgresql": "TIMESTAMP"},
+        "deleted_at": {"sqlite": "DATETIME", "postgresql": "TIMESTAMP"},
+    },
 }
 
 
 def bootstrap_schema() -> None:
     """Additive compatibility layer for local SQLite/Postgres installs before Alembic."""
-    inspector = inspect(engine)
+    active_engine = get_engine()
+    inspector = inspect(active_engine)
     existing_tables = set(inspector.get_table_names())
-    dialect = engine.dialect.name
-    with engine.begin() as connection:
+    dialect = active_engine.dialect.name
+    with active_engine.begin() as connection:
         for table, columns in SCHEMA_BOOTSTRAP_COLUMNS.items():
             if table not in existing_tables:
                 continue

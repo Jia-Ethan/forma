@@ -1,10 +1,14 @@
 from pathlib import Path
 from zipfile import ZipFile
 import io
+import json
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.storage import storage
+from backend.app.worker import cleanup_public_exports
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-thesis.docx"
 
@@ -81,7 +85,8 @@ def test_health_reports_word_capabilities_and_limits():
     assert body["ok"] is True
     assert body["template"] == "sc-th-word"
     assert body["capabilities"]["docx_export"] is True
-    assert body["limits"]["max_docx_size_bytes"] == 4 * 1024 * 1024
+    assert body["limits"]["max_docx_size_bytes"] == 20 * 1024 * 1024
+    assert body["limits"]["max_text_precheck_chars"] == 80_000
 
 
 def test_precheck_docx_rejects_non_docx_upload():
@@ -123,6 +128,97 @@ def test_precheck_text_keeps_missing_sections_as_warnings():
     assert payload["summary"]["can_confirm"] is True
     assert payload["summary"]["warning_count"] >= 1
     assert any(issue["code"] == "ABSTRACT_CN_BLANK" for issue in payload["issues"])
+
+
+def test_public_precheck_requires_privacy_confirmation():
+    with TestClient(app) as client:
+        response = client.post("/api/public/precheck/text", json={"text": "已有论文正文"})
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "PRIVACY_CONFIRMATION_REQUIRED"
+
+
+def test_public_text_precheck_returns_export_token_and_expires_at():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/public/precheck/text",
+            json={"text": "# 引言\n\n这是已有论文正文。" * 20, "privacy_accepted": True},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["export_token"]
+    assert payload["expires_at"]
+
+
+def test_public_text_precheck_rejects_long_input():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/public/precheck/text",
+            json={"text": "x" * 80001, "privacy_accepted": True},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "TEXT_TOO_LONG"
+
+
+def test_public_docx_precheck_validates_file_header():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/public/precheck/docx",
+            data={"privacy_accepted": "true"},
+            files={"file": ("paper.docx", b"not-a-zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "DOCX_INVALID"
+
+
+def test_public_docx_export_uses_token_and_retained_download():
+    with TestClient(app) as client:
+        precheck = client.post(
+            "/api/public/precheck/text",
+            json={"text": "# 引言\n\n这是已有论文正文。" * 40, "privacy_accepted": True},
+        ).json()
+        export = client.post(
+            "/api/public/exports/docx",
+            json={"thesis": sample_payload(), "export_token": precheck["export_token"]},
+        )
+        assert export.status_code == 403
+
+        export = client.post(
+            "/api/public/exports/docx",
+            json={"thesis": precheck["thesis"], "export_token": precheck["export_token"]},
+        )
+
+        assert export.status_code == 200
+        payload = export.json()
+        download = client.get(payload["download_url"])
+        report = client.get(payload["report_url"])
+        assert download.status_code == 200
+        assert download.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        assert report.status_code == 200
+        assert report.json()["export_id"] == payload["export_id"]
+
+
+def test_public_export_expiry_and_janitor_cleanup():
+    with TestClient(app) as client:
+        precheck = client.post(
+            "/api/public/precheck/text",
+            json={"text": "# 引言\n\n这是已有论文正文。" * 40, "privacy_accepted": True},
+        ).json()
+        export = client.post(
+            "/api/public/exports/docx",
+            json={"thesis": precheck["thesis"], "export_token": precheck["export_token"]},
+        ).json()
+
+    meta_path = storage.root / "public" / "exports" / export["export_id"] / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["expires_at"] = (datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)).isoformat()
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    assert cleanup_public_exports() == 1
+    assert not meta_path.exists()
 
 
 def test_export_docx_rejects_blocking_payload():

@@ -5,14 +5,16 @@
 ![CI](https://img.shields.io/badge/CI-pytest%20%2B%20vitest%20%2B%20build-blue)
 ![Template](https://img.shields.io/badge/template-SCNU%20undergraduate-green)
 ![Privacy](https://img.shields.io/badge/privacy-local%20first-6b7280)
-![Status](https://img.shields.io/badge/status-vNext%20public%20site-17324d)
+![Status](https://img.shields.io/badge/status-v0.4%20online%20stable-17324d)
 
 ![SCNU Thesis Agent Workbench public preview](docs/assets/banner.png)
 
 `scnu-thesis-portal` 不是代写工具，也不是学校官方系统。它的核心价值是把论文 `.docx` 解析、结构规范化、合规检查、版本与导出放入一个可追溯的项目空间。任何 AI 或规则候选内容都必须先进入 Proposal Queue，用户确认后才可能生成新版本。
 
-- **在线体验**: [scnu-thesis-portal.vercel.app](https://scnu-thesis-portal.vercel.app)
-- **快速导出**: 上传 `.docx` 或粘贴正文，预检后导出规范化 Word
+- **主站路线**: 中国大陆云服务器 + 自定义域名 + ICP 备案
+- **Vercel mirror**: [scnu-thesis-portal.vercel.app](https://scnu-thesis-portal.vercel.app) 仅作为静态预览，不承载 Workbench 后端
+- **English**: [README-en.md](README-en.md)
+- **快速导出**: 上传 `.docx` 或粘贴已有论文正文，预检后导出规范化 Word
 - **Workbench Demo**: 公开站提供安全示例项目，不包含真实论文正文，不调用远程 Provider
 - **私有部署**: 推荐用于真实论文、Provider key、本地 Ollama 和完整 Workbench
 - **公开边界**: 非官方、非代写、不承诺查重率、不伪造参考文献或实验数据
@@ -105,11 +107,22 @@ VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev --prefix web
 docker compose up --build
 ```
 
-公开 Vercel 站点只承载 public site 与 quick export；完整 Workbench、Provider key、远程授权和长期项目数据建议放在私有环境。
+生产主站建议使用国内云服务器与自定义域名；Vercel 只保留静态 public mirror。完整 Workbench、Provider key、远程授权和长期项目数据建议放在私有环境。
+
+生产部署参考：
+
+```bash
+cp .env.production.example .env.production
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+```
+
+运维说明见 [国内主站部署 Runbook](docs/ops-mainland-runbook.md)。
 
 ## Privacy
 
 - 公开站默认不启用远程 LLM Provider
+- 公开导出文件保留 30 分钟，过期后清理
+- 匿名入口需要隐私确认、Turnstile 与 IP 限流
 - Provider key 只在服务端封存，前端只显示 metadata、capabilities、configured、verified
 - 远程 Provider 必须经过项目级授权，且可撤销
 - 参考文献只做格式整理，不补造缺失作者、刊名、卷期或 DOI

@@ -5,7 +5,7 @@ import ipaddress
 import json
 import socket
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .contracts import CapabilityFlags, NormalizedThesis
-from .config import ACCESS_CODE_COOKIE_NAME, APP_ENV, access_code, using_insecure_local_secret
+from .config import ACCESS_CODE_COOKIE_NAME, APP_ENV, PUBLIC_EXPORT_RETENTION_SECONDS, access_code, using_insecure_local_secret
 from .database import get_db
 from .errors import AppError
 from .models import (
@@ -163,6 +163,7 @@ class ExportResponse(BaseModel):
     filename: str
     summary: dict
     created_at: datetime
+    expires_at: datetime | None = None
 
 
 class ProviderConfigRequest(BaseModel):
@@ -200,6 +201,17 @@ class SourceConfirmRequest(BaseModel):
     title: str
     url: str
     summary: str = ""
+
+
+class AuditLogResponse(BaseModel):
+    id: str
+    project_id: str | None
+    actor: str
+    action: str
+    target_type: str
+    target_id: str | None
+    metadata_json: dict
+    created_at: datetime
 
 
 def project_to_response(project: ThesisProject) -> ProjectResponse:
@@ -552,6 +564,7 @@ def create_export(project_id: str, request: ExportCreateRequest, db: Session = D
         storage_key=storage_key,
         filename=filename,
         summary=exported.summary,
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=PUBLIC_EXPORT_RETENTION_SECONDS),
     )
     db.add(row)
     db.add(AuditLog(id=new_id("audit"), project_id=project_id, action="export.created", target_type="export", target_id=row.id))
@@ -567,10 +580,18 @@ def list_exports(project_id: str, db: Session = Depends(get_db)) -> list[ExportR
     return [ExportResponse.model_validate(row, from_attributes=True) for row in rows]
 
 
+@router.get("/projects/{project_id}/audit-logs", response_model=list[AuditLogResponse])
+def list_audit_logs(project_id: str, db: Session = Depends(get_db)) -> list[AuditLogResponse]:
+    require_project(db, project_id)
+    rows = db.execute(select(AuditLog).where(AuditLog.project_id == project_id).order_by(AuditLog.created_at.desc())).scalars().all()
+    return [AuditLogResponse.model_validate(row, from_attributes=True) for row in rows]
+
+
 @router.get("/exports/{export_id}/download")
 def download_export(export_id: str, db: Session = Depends(get_db)) -> Response:
     row = db.get(ExportRecord, export_id)
-    if not row or not row.storage_key or not storage.exists(row.storage_key):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if not row or row.deleted_at is not None or (row.expires_at and row.expires_at < now) or not row.storage_key or not storage.exists(row.storage_key):
         raise AppError("EXPORT_NOT_FOUND", "导出文件不存在或已删除。", status_code=404)
     payload = storage.get_bytes(row.storage_key)
     return Response(content=payload, media_type=_media_type_for_export(row), headers={"Content-Disposition": f'attachment; filename="{row.filename}"'})

@@ -438,6 +438,35 @@
   padding: 0.6rem 1rem 0;
 }
 
+.privacy-confirm {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  padding: 0.35rem 0.4rem 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.privacy-confirm input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.1rem;
+  accent-color: var(--accent-strong);
+  flex: 0 0 auto;
+}
+
+.turnstile-box,
+.turnstile-note {
+  padding: 0 0.4rem;
+}
+
+.turnstile-note {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .ai-gen-panel,
 .ai-gen-tab {
   display: flex;

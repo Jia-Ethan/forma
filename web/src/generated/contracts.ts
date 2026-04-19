@@ -161,6 +161,7 @@ export interface PreviewBlock {
 
 export interface ServiceLimits {
   max_docx_size_bytes: number;
+  max_text_precheck_chars: number;
 }
 
 export interface PrecheckResponse {
@@ -168,6 +169,8 @@ export interface PrecheckResponse {
   summary: PrecheckSummary;
   issues: PrecheckIssue[];
   preview_blocks: PreviewBlock[];
+  export_token: string | null;
+  expires_at: string | null;
 }
 
 export interface HealthResponse {
