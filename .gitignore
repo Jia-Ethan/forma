@@ -36,7 +36,7 @@ backend/app/frontend_bundle.py
 web/node_modules/
 web/dist/
 *.tsbuildinfo
-public/
+/public/
 .vercel/
 .vercel
 .vercel_python_packages/
