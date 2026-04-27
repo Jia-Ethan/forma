@@ -90,6 +90,6 @@ def turnstile_secret_key() -> str:
 
 
 def turnstile_required() -> bool:
-    if read_bool_env("TURNSTILE_REQUIRED", False):
-        return True
-    return (os.getenv("APP_ENV", APP_ENV).strip().lower() or APP_ENV) == "production"
+    if os.getenv("TURNSTILE_REQUIRED") is not None:
+        return read_bool_env("TURNSTILE_REQUIRED", False)
+    return (os.getenv("APP_ENV", APP_ENV).strip().lower() or APP_ENV) == "production" and bool(turnstile_secret_key())
