@@ -33,6 +33,8 @@ Open:
 - Guide: `http://127.0.0.1:5173/#/guide`
 - Workbench demo: `http://127.0.0.1:5173/#/workbench-demo`
 
+Public Vercel preview: [forma-rosy.vercel.app](https://forma-rosy.vercel.app)
+
 ## Verification
 
 ```bash
