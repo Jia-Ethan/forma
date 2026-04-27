@@ -52,7 +52,6 @@ export function MinimalHome(props: MinimalHomeProps) {
           <h1 id="formatter-title" className="formatter-title">
             Format your thesis with AI.
           </h1>
-          <p className="formatter-subtitle">粘贴格式要求，上传论文，让 Agent 完成预检、修复与导出。</p>
           <div className="hero-actions">
             <a className="primary-action" href="#requirements">
               Start

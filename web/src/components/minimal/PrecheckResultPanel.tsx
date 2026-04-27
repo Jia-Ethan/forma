@@ -65,7 +65,6 @@ export function PrecheckResultPanel({
         <div className="result-panel-heading quiet-result">
           <span>Preview</span>
           <h2>Ready when your thesis is.</h2>
-          <p>预检结果会在这里出现。首页保持安静，细节留给 Guide。</p>
         </div>
       </section>
     );
