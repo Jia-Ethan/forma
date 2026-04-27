@@ -27,7 +27,8 @@ class ObjectStorage(Protocol):
 
 class LocalObjectStorage:
     def __init__(self, root: Path | None = None):
-        self.root = root or Path(os.getenv("SCNU_STORAGE_DIR", str(OUTPUTS_DIR / "storage")))
+        default_root = Path("/tmp/forma/storage") if os.getenv("VERCEL") else OUTPUTS_DIR / "storage"
+        self.root = root or Path(os.getenv("SCNU_STORAGE_DIR", str(default_root)))
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
